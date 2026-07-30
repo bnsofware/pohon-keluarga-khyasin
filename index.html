@@ -1059,7 +1059,7 @@ function personCard(p, isMainFocus, small){
   const card = document.createElement('div');
   card.className = 'card '+genderClass(p.gender)+(isMainFocus?' focus-main':'');
   const head = document.createElement('div'); head.className='card-head';
-  head.innerHTML = `${avatarHtml(p, 38)}
+  head.innerHTML = `${avatarHtml(p, isMainFocus?68:50)}
     <div>
       <div class="name ${isMainFocus?'':'clickable'}">${escapeHtml(p.name)}</div>
       <div class="years">${yearsLabel(p)}${yearsLabel(p)?' · ':''}${genBadgeHtml(computeGeneration(p.id))}</div>
