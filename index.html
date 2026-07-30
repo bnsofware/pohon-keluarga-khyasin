@@ -942,7 +942,7 @@ function render(){
       : '';
     c.innerHTML = `<div class="child-card-top">
         ${checkboxHtml}
-        ${avatarHtml(k, 28)}
+        ${avatarHtml(k, 42)}
         <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div></div>
       </div>
       ${childSelectMode ? '' : `<div class="child-card-actions">
