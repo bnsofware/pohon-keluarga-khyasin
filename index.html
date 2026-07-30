@@ -684,13 +684,48 @@ function formatDateDisplay(d){
   }
   return d; // data lama yang cuma berisi tahun, tampilkan apa adanya
 }
+// Menghitung usia dari tanggal/tahun lahir sampai tanggal/tahun acuan
+// (tanggal wafat kalau sudah meninggal, atau hari ini kalau masih hidup).
+// Mendukung format tahun saja ("1937") maupun tanggal lengkap ("1937-05-12").
+// Mengembalikan null kalau datanya tidak cukup untuk dihitung.
+function calcAge(birth, untilDate){
+  const parse = s=>{
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+      const [y,m,d] = s.split('-').map(Number);
+      return {y,m,d};
+    }
+    if(/^\d{4}$/.test(s)) return {y:Number(s), m:null, d:null};
+    return null;
+  };
+  const b = parse(birth);
+  if(!b) return null;
+  let ref;
+  if(untilDate){
+    ref = parse(untilDate);
+    if(!ref) return null;
+  }else{
+    const now = new Date();
+    ref = {y: now.getFullYear(), m: now.getMonth()+1, d: now.getDate()};
+  }
+  let age = ref.y - b.y;
+  if(b.m && ref.m && (ref.m < b.m || (ref.m===b.m && ref.d < b.d))) age--;
+  if(age < 0) return null;
+  return age;
+}
 function yearsLabel(p){
   if(!p) return '';
   const b = formatDateDisplay(p.birthYear);
   const d = formatDateDisplay(p.deathYear);
   let range = '';
-  if(b && d) range = b+' – '+d;
-  else if(b) range = b+' – sekarang';
+  let ageInfo = '';
+  if(p.birthYear){
+    const age = p.deathYear ? calcAge(p.birthYear, p.deathYear) : calcAge(p.birthYear, null);
+    const ageText = (age!==null) ? (age+' th') : '-';
+    ageInfo = p.deathYear ? (' (wafat usia '+ageText+')') : (' (usia '+ageText+')');
+  }
+  if(b && d) range = b+' – '+d+ageInfo;
+  else if(b) range = b+' – sekarang'+ageInfo;
+  else range = '-';
   if(p.birthPlace && range) return p.birthPlace+' · '+range;
   if(p.birthPlace) return p.birthPlace;
   return range;
