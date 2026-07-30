@@ -686,12 +686,14 @@ function formatDateDisplay(d){
 }
 function yearsLabel(p){
   if(!p) return '';
-  let b = formatDateDisplay(p.birthYear);
+  const b = formatDateDisplay(p.birthYear);
   const d = formatDateDisplay(p.deathYear);
-  if(b && p.birthPlace) b = b+', '+p.birthPlace;
-  if(b && d) return b+' – '+d;
-  if(b) return b+' – sekarang';
-  return '';
+  let range = '';
+  if(b && d) range = b+' – '+d;
+  else if(b) range = b+' – sekarang';
+  if(p.birthPlace && range) return p.birthPlace+' · '+range;
+  if(p.birthPlace) return p.birthPlace;
+  return range;
 }
 function avatarHtml(p, size){
   size = size || 38;
@@ -1178,15 +1180,15 @@ function openAddModal(ctx){
             <option value="P">Perempuan</option>
           </select>
         </div>
-        <div class="field"><label>Tanggal / Tahun Lahir</label>
-          <input type="text" id="fBirth" placeholder="cth: 1937 atau 1937-05-12" inputmode="numeric">
-          <div class="hint" style="margin-top:3px;">Isi tahun saja kalau tanggal pastinya lupa/belum tahu — bisa dilengkapi lagi nanti.</div>
+        <div class="field"><label>Tempat Lahir (opsional)</label>
+          <input type="text" id="fBirthPlace" placeholder="cth: Rangkasbitung">
         </div>
       </div>
-      <div class="field"><label>Tempat Lahir (opsional)</label>
-        <input type="text" id="fBirthPlace" placeholder="cth: Rangkasbitung">
+      <div class="field"><label>Tanggal / Tahun Lahir</label>
+        <input type="text" id="fBirth" placeholder="cth: 1937 atau 1937-05-12" inputmode="numeric">
+        <div class="hint" style="margin-top:3px;">Isi tahun saja kalau tanggal pastinya lupa/belum tahu — bisa dilengkapi lagi nanti.</div>
       </div>
-      <div class="field"><label>Tanggal / Tahun Wafat (jika sudah tiada)</label>
+      <div class="field"><label>Tanggal / Tahun Wafat <span style="font-weight:400;color:var(--ink-soft);">(kosongkan kalau masih hidup — isi hanya jika orang ini sudah meninggal)</span></label>
         <input type="text" id="fDeath" placeholder="cth: 2018 atau 2018-09-03" inputmode="numeric">
         <div class="hint" style="margin-top:3px;">Boleh diisi tahun saja dulu.</div>
       </div>
@@ -1625,15 +1627,15 @@ function openEditModal(personId){
               <option value="P" ${p.gender==='P'?'selected':''}>Perempuan</option>
             </select>
           </div>
-          <div class="field"><label>Tanggal / Tahun Lahir</label>
-            <input type="text" id="eBirth" placeholder="cth: 1937 atau 1937-05-12" inputmode="numeric" value="${escapeHtml(p.birthYear||'')}">
-            <div class="hint" style="margin-top:3px;">Boleh tahun saja dulu, lengkapi tanggal-bulannya nanti kapan saja.</div>
+          <div class="field"><label>Tempat Lahir (opsional)</label>
+            <input type="text" id="eBirthPlace" placeholder="cth: Rangkasbitung" value="${escapeHtml(p.birthPlace||'')}">
           </div>
         </div>
-        <div class="field"><label>Tempat Lahir (opsional)</label>
-          <input type="text" id="eBirthPlace" placeholder="cth: Rangkasbitung" value="${escapeHtml(p.birthPlace||'')}">
+        <div class="field"><label>Tanggal / Tahun Lahir</label>
+          <input type="text" id="eBirth" placeholder="cth: 1937 atau 1937-05-12" inputmode="numeric" value="${escapeHtml(p.birthYear||'')}">
+          <div class="hint" style="margin-top:3px;">Boleh tahun saja dulu, lengkapi tanggal-bulannya nanti kapan saja.</div>
         </div>
-        <div class="field"><label>Tanggal / Tahun Wafat</label>
+        <div class="field"><label>Tanggal / Tahun Wafat <span style="font-weight:400;color:var(--ink-soft);">(kosongkan kalau masih hidup — isi hanya jika orang ini sudah meninggal)</span></label>
           <input type="text" id="eDeath" placeholder="cth: 2018 atau 2018-09-03" inputmode="numeric" value="${escapeHtml(p.deathYear||'')}">
         </div>
         <div class="field">
