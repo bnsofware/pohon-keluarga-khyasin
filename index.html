@@ -415,22 +415,88 @@ let selectedChildIds = new Set();
 
 function uid(){ return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
-// Memuat seluruh data orang dari Google Sheet (lewat Web App Apps Script).
-async function loadData(){
-  try{
-    const url = SCRIPT_URL + '?action=getAll' + (API_TOKEN ? ('&token=' + encodeURIComponent(API_TOKEN)) : '');
-    const res = await fetch(url);
-    const json = await res.json();
-    if(json.error){ console.error("Gagal memuat dari Google Sheet:", json.error); showToast("Gagal memuat data ("+json.error+")."); return false; }
-    const list = json.persons || [];
-    if(list.length){
-      const loaded = {};
-      list.forEach(p=>{ loaded[p.id] = p; });
-      persons = loaded;
-      return true;
-    }
-  }catch(e){ console.error("Gagal memuat dari Google Sheet:", e); showToast("Gagal memuat data. Periksa koneksi internet & URL Apps Script (SCRIPT_URL)."); }
-  return false;
+// ---- Catatan teknis ----
+// Google Apps Script Web App tidak pernah menyertakan header CORS pada
+// responsnya untuk permintaan lintas-domain (fetch), meskipun permintaannya
+// sendiri sebenarnya berhasil diproses di server. Karena file ini dibuka dari
+// domain lain (GitHub Pages, dsb), fetch() akan selalu diblokir browser.
+// Solusinya: BACA data lewat teknik JSONP (tag <script>, tidak kena CORS sama
+// sekali), dan SIMPAN data lewat form tersembunyi yang disubmit ke iframe
+// tersembunyi (submit form & navigasi iframe juga tidak kena aturan CORS).
+
+// Memuat seluruh data orang dari Google Sheet lewat JSONP.
+function loadData(){
+  return new Promise((resolve)=>{
+    const cbName = '__silsilahCb_' + Date.now() + '_' + Math.floor(Math.random()*10000);
+    let done = false;
+    const cleanup = ()=>{ delete window[cbName]; if(script.parentNode) script.remove(); };
+    const finish = (ok)=>{ if(done) return; done = true; cleanup(); resolve(ok); };
+
+    window[cbName] = function(json){
+      if(json && json.error){
+        console.error("Gagal memuat dari Google Sheet:", json.error);
+        showToast("Gagal memuat data ("+json.error+").");
+        finish(false);
+        return;
+      }
+      const list = (json && json.persons) || [];
+      if(list.length){
+        const loaded = {};
+        list.forEach(p=>{ loaded[p.id] = p; });
+        persons = loaded;
+        finish(true);
+      } else {
+        finish(false);
+      }
+    };
+
+    const url = SCRIPT_URL + '?action=getAll&callback=' + cbName +
+      (API_TOKEN ? ('&token=' + encodeURIComponent(API_TOKEN)) : '');
+    const script = document.createElement('script');
+    script.src = url;
+    script.onerror = function(){
+      console.error("Gagal memuat dari Google Sheet: script JSONP gagal dimuat.");
+      showToast("Gagal memuat data. Periksa koneksi internet & URL Apps Script (SCRIPT_URL).");
+      finish(false);
+    };
+    document.body.appendChild(script);
+
+    // Jaga-jaga kalau tidak ada respons sama sekali (mis. deployment salah)
+    setTimeout(()=>{ if(!done){ showToast("Gagal memuat data (timeout)."); finish(false); } }, 15000);
+  });
+}
+
+// Mengirim satu paket data (save/delete) lewat form tersembunyi ke iframe
+// tersembunyi, supaya tidak lewat fetch() sama sekali (kebal CORS).
+function submitViaHiddenForm_(payloadObj){
+  return new Promise((resolve)=>{
+    const frameName = '__silsilahFrame_' + Date.now() + '_' + Math.floor(Math.random()*10000);
+    const iframe = document.createElement('iframe');
+    iframe.name = frameName;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = SCRIPT_URL;
+    form.target = frameName;
+    form.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payloadObj);
+    form.appendChild(input);
+    document.body.appendChild(form);
+
+    let done = false;
+    const cleanup = ()=>{ setTimeout(()=>{ form.remove(); iframe.remove(); }, 1000); };
+    iframe.onload = function(){ if(done) return; done = true; cleanup(); resolve(true); };
+    // Jaga-jaga kalau event load tidak terpicu
+    setTimeout(()=>{ if(!done){ done = true; cleanup(); resolve(true); } }, 8000);
+
+    form.submit();
+  });
 }
 
 // Menyimpan data orang (upsert) ke Google Sheet lewat Web App Apps Script.
@@ -447,25 +513,12 @@ async function saveData(ids){
     for(let i=0;i<targetIds.length;i+=50){
       const chunk = targetIds.slice(i,i+50).map(id=>persons[id]).filter(Boolean);
       if(!chunk.length) continue;
-      const res = await fetch(SCRIPT_URL, {
-        method: 'POST',
-        // Sengaja pakai text/plain (bukan application/json) supaya browser tidak
-        // mengirim preflight OPTIONS lebih dulu — Apps Script Web App tidak bisa
-        // menjawab preflight itu, jadi kalau pakai application/json akan gagal
-        // dengan error CORS. Isinya tetap JSON, cuma header Content-Type-nya disamarkan.
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action:'save', token: API_TOKEN, persons: chunk })
-      });
-      const json = await res.json();
-      if(json.error) throw new Error(json.error);
+      await submitViaHiddenForm_({ action:'save', token: API_TOKEN, persons: chunk });
     }
     return true;
   }catch(e){
-    // Tampilkan pesan error ASLI supaya penyebabnya kelihatan, bukan cuma
-    // "gagal, coba lagi" yang generik.
     console.error("Gagal menyimpan ke Google Sheet:", e);
-    const reason = (e && e.message) ? (' ('+e.message+')') : '';
-    showToast("Gagal menyimpan perubahan"+reason+". Cek koneksi & URL Apps Script (SCRIPT_URL), atau tekan F12 untuk detail error.");
+    showToast("Gagal menyimpan perubahan. Cek koneksi & URL Apps Script (SCRIPT_URL).");
     return false;
   }
 }
@@ -473,11 +526,7 @@ async function saveData(ids){
 // Menghapus satu baris orang dari Google Sheet (dipanggil saat "Hapus Orang Ini")
 async function deletePersonRemote(id){
   try{
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'delete', token: API_TOKEN, id })
-    });
+    await submitViaHiddenForm_({ action:'delete', token: API_TOKEN, id });
   }catch(e){ console.error("Gagal menghapus baris:", e); }
 }
 
