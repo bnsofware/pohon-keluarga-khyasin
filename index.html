@@ -428,25 +428,41 @@ function uid(){ return 'p_' + Date.now().toString(36) + Math.random().toString(3
 function loadData(){
   return new Promise((resolve)=>{
     const cbName = '__silsilahCb_' + Date.now() + '_' + Math.floor(Math.random()*10000);
-    let done = false;
-    const cleanup = ()=>{ delete window[cbName]; if(script.parentNode) script.remove(); };
-    const finish = (ok)=>{ if(done) return; done = true; cleanup(); resolve(ok); };
+    let resolved = false;   // promise sudah di-resolve (timeout ATAU respons asli)
+    let arrived = false;    // respons asli sudah benar-benar datang
+
+    // Hapus tag <script> & fungsi callback dari window — hanya dipanggil
+    // setelah respons ASLI datang (bukan saat timeout), supaya kalau
+    // responsnya telat, ia tetap bisa diproses dengan benar saat tiba.
+    const cleanupReal = ()=>{ delete window[cbName]; if(script.parentNode) script.remove(); };
 
     window[cbName] = function(json){
+      arrived = true;
       if(json && json.error){
         console.error("Gagal memuat dari Google Sheet:", json.error);
-        showToast("Gagal memuat data ("+json.error+").");
-        finish(false);
+        if(!resolved) showToast("Gagal memuat data ("+json.error+").");
+        cleanupReal();
+        if(!resolved){ resolved = true; resolve(false); }
         return;
       }
       const list = (json && json.persons) || [];
+      cleanupReal();
       if(list.length){
         const loaded = {};
         list.forEach(p=>{ loaded[p.id] = p; });
         persons = loaded;
-        finish(true);
-      } else {
-        finish(false);
+        if(!resolved){ resolved = true; resolve('success'); }
+        else{
+          // Respons datang setelah sempat "timeout" ditampilkan ke pengguna —
+          // tetap terapkan datanya dan render ulang supaya tidak hilang percuma.
+          if(typeof render === 'function'){ try{ render(); }catch(e){} }
+          showToast("Data berhasil dimuat (agak lambat, tapi berhasil).");
+        }
+      } else if(!resolved){
+        // Respons ASLI dari server bilang memang kosong (bukan gagal/timeout) —
+        // ini satu-satunya kondisi yang boleh memicu seed data awal.
+        resolved = true;
+        resolve('empty');
       }
     };
 
@@ -455,14 +471,27 @@ function loadData(){
     const script = document.createElement('script');
     script.src = url;
     script.onerror = function(){
+      if(arrived) return; // sudah kepakai sebelumnya, abaikan
       console.error("Gagal memuat dari Google Sheet: script JSONP gagal dimuat.");
-      showToast("Gagal memuat data. Periksa koneksi internet & URL Apps Script (SCRIPT_URL).");
-      finish(false);
+      if(!resolved){ showToast("Gagal memuat data. Periksa koneksi internet & URL Apps Script (SCRIPT_URL)."); resolved = true; resolve('error'); }
+      cleanupReal();
     };
     document.body.appendChild(script);
 
-    // Jaga-jaga kalau tidak ada respons sama sekali (mis. deployment salah)
-    setTimeout(()=>{ if(!done){ showToast("Gagal memuat data (timeout)."); finish(false); } }, 15000);
+    // Kalau lebih dari 40 detik belum ada respons SAMA SEKALI, anggap
+    // "belum jelas" untuk sementara (supaya UI tidak menggantung selamanya) —
+    // TAPI callback & tag <script>-nya SENGAJA tidak dihapus, supaya kalau
+    // ternyata responsnya cuma telat (bukan benar-benar gagal), datanya tetap
+    // masuk begitu tiba, alih-alih memicu error di console. Status 'error' di
+    // sini TIDAK BOLEH dianggap "kosong" oleh pemanggilnya — supaya data asli
+    // tidak pernah ketimpa data contoh (seed) hanya gara-gara koneksi lambat.
+    setTimeout(()=>{
+      if(!resolved){
+        resolved = true;
+        showToast("Memuat data lebih lama dari biasanya, mohon tunggu...");
+        resolve('error');
+      }
+    }, 40000);
   });
 }
 
@@ -1845,10 +1874,17 @@ function showToast(msg){
 
 /* ---------------- Init ---------------- */
 (async function init(){
-  const loaded = await loadData();
-  if(!loaded || Object.keys(persons).length===0){
+  const status = await loadData(); // 'success' | 'empty' | 'error'
+  if(status === 'empty'){
+    // Server sudah konfirmasi memang belum ada data sama sekali di Sheet —
+    // baru di sini aman untuk mengisi data contoh awal.
     seedData();
     await saveData();
+  } else if(status === 'error'){
+    // Gagal/timeout memuat data — JANGAN isi data contoh (itu akan menimpa
+    // data asli kalau ternyata sebenarnya ada, cuma koneksi lagi lambat).
+    // Biarkan pengguna refresh manual.
+    showToast("Gagal memuat data dari server. Silakan refresh halaman ini.");
   }
   render();
 })();
