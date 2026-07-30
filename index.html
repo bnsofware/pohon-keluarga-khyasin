@@ -152,9 +152,26 @@
 
   main{max-width:960px;margin:0 auto;padding:30px 16px 10px;}
 
-  .breadcrumbs{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;min-height:18px;}
-  .breadcrumbs a{color:var(--pine);cursor:pointer;text-decoration:none;font-weight:700;}
-  .breadcrumbs a:hover{text-decoration:underline;color:var(--gold);}
+  .breadcrumbs{margin-bottom:14px;min-height:18px;}
+  .back-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:11px 20px 11px 16px;
+    border:none;
+    border-radius:999px;
+    background:var(--pine);
+    color:#fff;
+    font-family:'Inter',sans-serif;
+    font-weight:700;
+    font-size:14.5px;
+    cursor:pointer;
+    box-shadow:var(--shadow);
+    transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  }
+  .back-btn:hover{transform:translateY(-2px); filter:brightness(1.1);}
+  .back-btn:active{transform:translateY(0);}
+  .back-btn svg{width:19px;height:19px;flex-shrink:0;}
 
   .section-label{
     font-size:11px;
@@ -839,10 +856,12 @@ function render(){
     return;
   }
 
-  // breadcrumbs (simple back link)
+  // breadcrumbs (tombol kembali yang jelas terlihat, dengan ikon panah)
   if(historyStack.length){
-    const back = document.createElement('a');
-    back.textContent = '← Kembali';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'back-btn';
+    back.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><span>Kembali</span>';
     back.onclick = ()=>{ state.focusId = historyStack.pop(); state.activeSpouseId = (persons[state.focusId].spouseIds||[])[0]||null; render(); };
     bc.appendChild(back);
   }
