@@ -999,8 +999,6 @@ async function bulkDeleteSelectedChildren(){
     });
     delete persons[deletedId];
   });
-  await Promise.all(ids.map(id=>deletePersonRemote(id)));
-  await saveData(Array.from(affected));
 
   historyStack = historyStack.filter(id=>persons[id] && !ids.includes(id));
   if(ids.includes(state.activeSpouseId)){
@@ -1008,8 +1006,20 @@ async function bulkDeleteSelectedChildren(){
   }
   childSelectMode = false;
   selectedChildIds.clear();
+
+  // Perbarui tampilan LANGSUNG — jangan menunggu proses simpan ke server
+  // selesai dulu, supaya tidak terasa "diam"/perlu di-refresh manual.
   render();
   showToast(ids.length+' anak berhasil dihapus.');
+
+  // Kirim perubahan ke Google Sheet di belakang layar, tidak menahan tampilan.
+  try{
+    await Promise.all(ids.map(id=>deletePersonRemote(id)));
+    await saveData(Array.from(affected));
+  }catch(e){
+    console.error("Gagal sinkron hapus ke server:", e);
+    showToast('Terhapus di layar, tapi gagal sinkron ke server. Coba refresh untuk memastikan.');
+  }
 }
 
 function parentOrEmptySlot(focus, which){
@@ -1709,9 +1719,6 @@ function openEditModal(personId){
       if(c.motherId===deletedId){ c.motherId=null; affected.add(c.id); }
     });
     delete persons[deletedId];
-    await deletePersonRemote(deletedId);
-    await saveData(Array.from(affected));
-    closeModal();
 
     // Buang referensi ke orang yang sudah dihapus dari riwayat "Kembali"
     historyStack = historyStack.filter(id=>id!==deletedId && persons[id]);
@@ -1734,8 +1741,20 @@ function openEditModal(personId){
     // Kalau yang dihapus adalah orang tua atau salah satu anak (bukan fokus
     // maupun pasangan aktif), posisi/rumpun yang sedang dilihat tidak berubah.
 
+    // Perbarui tampilan LANGSUNG di sini — jangan menunggu proses simpan ke
+    // server selesai dulu, supaya tidak terasa "diam"/perlu di-refresh manual.
+    closeModal();
     render();
     showToast('Data telah dihapus.');
+
+    // Kirim perubahan ke Google Sheet di belakang layar, tidak menahan tampilan.
+    try{
+      await deletePersonRemote(deletedId);
+      await saveData(Array.from(affected));
+    }catch(e){
+      console.error("Gagal sinkron hapus ke server:", e);
+      showToast('Terhapus di layar, tapi gagal sinkron ke server. Coba refresh untuk memastikan.');
+    }
   };
 }
 
