@@ -290,12 +290,15 @@
   .empty-slot button:not(.btn){background:none;border:none;color:var(--ink-soft);font-size:13px;cursor:pointer;font-weight:700;}
   .empty-slot button:not(.btn):hover{color:var(--pine);}
 
-  .spouse-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .spouse-tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .spouse-tab{
-    padding:6px 13px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;
-    border:1.5px solid #DDD6EE;background:#fff;color:var(--ink-soft);transition:all .15s;
+    padding:12px 22px;border-radius:26px;font-size:15px;font-weight:700;cursor:pointer;
+    border:2px solid #DDD6EE;background:#fff;color:var(--ink-soft);transition:all .15s;
+    box-shadow:0 2px 8px rgba(27,23,48,0.06);
   }
-  .spouse-tab.active{background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;border-color:var(--pine-dark);box-shadow:0 4px 14px rgba(46,27,87,0.35);}
+  .spouse-tab:hover{border-color:var(--gold);color:var(--pine-dark);transform:translateY(-2px);}
+  .spouse-tab.active{background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;border-color:var(--pine-dark);box-shadow:0 6px 18px rgba(46,27,87,0.4);}
+  .spouse-tab.active:hover{transform:none;}
 
   .couple-row{display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;}
   .couple-row .card{flex:1 1 260px;}
@@ -1130,7 +1133,7 @@ function personCard(p, isMainFocus, small){
   editBtn.onclick=(e)=>{ e.stopPropagation(); openEditModal(p.id); };
   actions.appendChild(editBtn);
   if(isMainFocus){
-    const addSp = document.createElement('button'); addSp.className='btn btn-spouse'; addSp.textContent='+ Pasangan';
+    const addSp = document.createElement('button'); addSp.className='btn btn-ghost'; addSp.textContent='+ Pasangan';
     addSp.onclick=(e)=>{e.stopPropagation(); openAddModal({mode:'spouse', personId:p.id});};
     actions.appendChild(addSp);
   }
