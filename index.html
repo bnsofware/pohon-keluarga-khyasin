@@ -357,6 +357,12 @@
     border-top:4px solid var(--gold);
     animation:modalPop .18s ease;
   }
+  .modal.modal-wide{max-width:800px;}
+  .branch-card{border:1.5px solid #EAE4D2;border-radius:14px;padding:14px 16px;background:var(--paper);transition:box-shadow .15s;}
+  .branch-card:hover{box-shadow:var(--shadow);cursor:pointer;}
+  .branch-bar-track{height:8px;border-radius:5px;background:#E4DFCF;overflow:hidden;}
+  .branch-bar-fill{height:100%;border-radius:5px;}
+  .branch-metric-label{font-size:11px;color:var(--ink-soft);display:flex;justify-content:space-between;margin-bottom:3px;}
   @keyframes modalPop{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
   .modal-head{padding:20px 22px 6px;}
   .modal-head h3{margin:0;font-size:21px;color:var(--ink);}
@@ -414,6 +420,7 @@
   <button class="btn btn-outline" id="btnRefresh" title="Muat ulang data terbaru">⟳ Segarkan</button>
   <button class="btn btn-outline" id="btnExport" title="Unduh seluruh data sebagai file Excel">⬇ Export Excel</button>
   <button class="btn btn-outline" id="btnBirthdayToday" title="Lihat anggota yang berulang tahun hari ini">🎂 Ulang Tahun Hari Ini</button>
+  <button class="btn btn-outline" id="btnCompleteness" title="Bandingkan kelengkapan data antar cabang keluarga (6 anak KH Yasin)">📊 Dashboard Kelengkapan</button>
 </div>
 
 <main>
@@ -1523,6 +1530,151 @@ function formatTodayLong(d){
   return days[d.getDay()]+', '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
 }
 
+/* ---------------- Dashboard Kelengkapan Data per Cabang (Gen 2) ---------------- */
+// "Cabang" = anak kandung (bukan pasangan yang menikah masuk) dari leluhur Gen 1
+// (pasangan paling atas di pohon keluarga, mis. KH Yasin & istrinya). Dideteksi
+// otomatis lewat computeGeneration, BUKAN hardcode ID, supaya tetap akurat kalau
+// data berubah (nama leluhur diedit, dsb).
+function findGen2Branches(){
+  return Object.values(persons).filter(p=>{
+    if(!p.fatherId || !p.motherId) return false;
+    return computeGeneration(p.fatherId)===1 && computeGeneration(p.motherId)===1;
+  }).sort(childComparator);
+}
+
+// Mengumpulkan seluruh anggota satu cabang: orang itu sendiri, seluruh
+// keturunan darahnya (anak, cucu, dst — tanpa batas kedalaman), DAN
+// pasangan-pasangan yang menikah masuk ke cabang tsb (karena datanya juga
+// bagian dari catatan cabang ini). Pakai BFS + Set supaya tidak dobel/infinite.
+function collectBranchMembers(rootId){
+  const visited = new Set();
+  const queue = [rootId];
+  while(queue.length){
+    const id = queue.shift();
+    if(visited.has(id) || !persons[id]) continue;
+    visited.add(id);
+    const p = persons[id];
+    (p.spouseIds||[]).forEach(sid=>{ if(!visited.has(sid)) queue.push(sid); });
+    Object.values(persons).forEach(c=>{
+      if((c.fatherId===id || c.motherId===id) && !visited.has(c.id)) queue.push(c.id);
+    });
+  }
+  return Array.from(visited).map(id=>persons[id]).filter(Boolean);
+}
+
+// Kelengkapan data satu orang. Field inti (dipakai untuk skor keseluruhan):
+// foto, tanggal lahir LENGKAP (bukan cuma tahun), dan tempat lahir.
+// Info wafat (tanggal wafat lengkap + tempat kubur) dihitung terpisah,
+// karena field ini cuma relevan untuk orang yang memang sudah tercatat wafat.
+function personCompleteness(p){
+  const core = {
+    foto: !!p.photo,
+    tanggalLahirLengkap: /^\d{4}-\d{2}-\d{2}$/.test(p.birthYear||''),
+    tempatLahir: !!(p.birthPlace && p.birthPlace.trim()),
+  };
+  const coreVals = Object.values(core);
+  const score = coreVals.filter(Boolean).length / coreVals.length;
+  const isWafat = !!(p.deathYear && String(p.deathYear).trim());
+  const wafatLengkap = isWafat ? (/^\d{4}-\d{2}-\d{2}$/.test(p.deathYear) && !!(p.burialPlace && p.burialPlace.trim())) : null;
+  return {core, score, isWafat, wafatLengkap};
+}
+
+function branchStats(members){
+  let sumFoto=0,sumTgl=0,sumTempat=0, wafatCount=0, wafatLengkapCount=0, sumScore=0;
+  members.forEach(p=>{
+    const r = personCompleteness(p);
+    if(r.core.foto) sumFoto++;
+    if(r.core.tanggalLahirLengkap) sumTgl++;
+    if(r.core.tempatLahir) sumTempat++;
+    if(r.isWafat){ wafatCount++; if(r.wafatLengkap) wafatLengkapCount++; }
+    sumScore += r.score;
+  });
+  const n = members.length || 1;
+  return {
+    total: members.length,
+    fotoPct: Math.round(100*sumFoto/n),
+    tglPct: Math.round(100*sumTgl/n),
+    tempatPct: Math.round(100*sumTempat/n),
+    wafatCount, wafatLengkapCount,
+    wafatPct: wafatCount ? Math.round(100*wafatLengkapCount/wafatCount) : null,
+    overallPct: Math.round(100*sumScore/n)
+  };
+}
+
+function barColor(pct){
+  if(pct>=80) return '#3F7D52';   // hijau — lengkap
+  if(pct>=50) return 'var(--gold)'; // kuning emas — sedang
+  return 'var(--female)';         // merah muda tua — masih kurang
+}
+
+function metricBarHtml(label, pct){
+  const color = barColor(pct);
+  return `
+    <div style="margin-bottom:7px;">
+      <div class="branch-metric-label"><span>${label}</span><span style="font-weight:700;color:${color};">${pct}%</span></div>
+      <div class="branch-bar-track"><div class="branch-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+    </div>`;
+}
+
+function openCompletenessDashboard(){
+  const branches = findGen2Branches();
+  if(!branches.length){
+    showToast('Tidak ditemukan anggota Gen 2 (anak dari leluhur Gen 1) di data saat ini.');
+    return;
+  }
+  const rows = branches.map(root=>{
+    const members = collectBranchMembers(root.id);
+    const stats = branchStats(members);
+    return {root, stats};
+  }).sort((a,b)=> b.stats.overallPct - a.stats.overallPct);
+
+  const cardsHtml = rows.map((r,i)=>{
+    const {root, stats} = r;
+    const color = barColor(stats.overallPct);
+    return `
+    <div class="branch-card" data-id="${root.id}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <span style="width:22px;text-align:right;font-weight:700;color:var(--ink-soft);flex:none;">${i+1}.</span>
+        ${avatarHtml(root,40)}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(root.name)}</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota (cabang keluarga)</div>
+        </div>
+        <div style="text-align:center;flex:none;">
+          <div style="font-size:20px;font-weight:800;color:${color};">${stats.overallPct}%</div>
+          <div style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Skor</div>
+        </div>
+      </div>
+      ${metricBarHtml('Foto tersedia', stats.fotoPct)}
+      ${metricBarHtml('Tanggal lahir lengkap', stats.tglPct)}
+      ${metricBarHtml('Tempat lahir terisi', stats.tempatPct)}
+      ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anggota yang tercatat wafat di cabang ini.</div>'}
+    </div>`;
+  }).join('');
+
+  const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
+  overlay.innerHTML = `
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>📊 Dashboard Kelengkapan Data per Cabang</h3>
+        <p>Perbandingan antar ${branches.length} anak Gen 2, dihitung dari seluruh anak-cucu &amp; pasangan di masing-masing cabang. Diurutkan dari yang paling lengkap.</p>
+      </div>
+      <div class="modal-body" style="max-height:520px;overflow:auto;display:flex;flex-direction:column;gap:12px;">
+        ${cardsHtml}
+        <p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat. Klik salah satu cabang untuk membuka & melengkapi datanya.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="cancelBtn">Tutup</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('cancelBtn').onclick = closeModal;
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  overlay.querySelectorAll('.branch-card').forEach(el=>{
+    el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+  });
+}
+
 /* ---------------- Bulk Add Children Modal ---------------- */
 // Menambahkan banyak anak sekaligus dari daftar nama yang ditempel/ditulis,
 // satu nama per baris. Opsional tambahkan koma lalu L/P untuk jenis kelamin,
@@ -1916,6 +2068,7 @@ document.getElementById('btnRefresh').onclick = async ()=>{
 /* ---------------- Export to Excel ---------------- */
 document.getElementById('btnExport').onclick = exportToExcel;
 document.getElementById('btnBirthdayToday').onclick = openBirthdayModal;
+document.getElementById('btnCompleteness').onclick = openCompletenessDashboard;
 const genderLabel = g => g==='L' ? 'Laki-laki' : (g==='P' ? 'Perempuan' : '');
 
 async function exportToExcel(){
