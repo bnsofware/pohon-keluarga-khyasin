@@ -413,6 +413,7 @@
   <button class="btn btn-primary" id="btnAddSelf">+ Tambahkan Diri / Anggota</button>
   <button class="btn btn-outline" id="btnRefresh" title="Muat ulang data terbaru">⟳ Segarkan</button>
   <button class="btn btn-outline" id="btnExport" title="Unduh seluruh data sebagai file Excel">⬇ Export Excel</button>
+  <button class="btn btn-outline" id="btnBirthdayToday" title="Lihat anggota yang berulang tahun hari ini">🎂 Ulang Tahun Hari Ini</button>
 </div>
 
 <main>
@@ -1474,6 +1475,54 @@ function closeModal(){
   if(ov) ov.remove();
 }
 
+/* ---------------- Ulang Tahun Hari Ini ---------------- */
+// Hanya orang yang tanggal lahirnya lengkap (YYYY-MM-DD) yang bisa dicek,
+// karena data lama yang cuma berisi tahun (mis. "1937") tidak diketahui
+// bulan & tanggalnya sehingga tidak mungkin dipastikan ulang tahunnya hari ini.
+function birthdayPeopleToday(){
+  const now = new Date();
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const dd = String(now.getDate()).padStart(2,'0');
+  const todaySuffix = '-'+mm+'-'+dd;
+  return Object.values(persons)
+    .filter(p=> typeof p.birthYear==='string' && /^\d{4}-\d{2}-\d{2}$/.test(p.birthYear) && p.birthYear.slice(4)===todaySuffix)
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function openBirthdayModal(){
+  const list = birthdayPeopleToday();
+  const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
+
+  const itemsHtml = list.length ? list.map((p,i)=>`
+    <div class="birthday-item" data-id="${p.id}" style="display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer;">
+      <span style="width:24px;text-align:right;font-weight:600;color:var(--ink-soft);flex:none;">${i+1}.</span>
+      ${avatarHtml(p,44)}
+      <span style="font-weight:600;color:var(--ink);">${escapeHtml(p.name)}</span>
+    </div>`).join('') : `<p class="hint">Tidak ada anggota keluarga yang berulang tahun hari ini (yang tanggal lahirnya lengkap tercatat).</p>`;
+
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-head"><h3>🎂 Ulang Tahun Hari Ini</h3><p>${formatTodayLong(new Date())}</p></div>
+      <div class="modal-body" style="max-height:420px;overflow:auto;">${itemsHtml}</div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="cancelBtn">Tutup</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('cancelBtn').onclick = closeModal;
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  overlay.querySelectorAll('.birthday-item').forEach(el=>{
+    el.onmouseenter = ()=>{ el.style.background='var(--paper-dark)'; };
+    el.onmouseleave = ()=>{ el.style.background='transparent'; };
+    el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+  });
+}
+function formatTodayLong(d){
+  const days=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  return days[d.getDay()]+', '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+}
+
 /* ---------------- Bulk Add Children Modal ---------------- */
 // Menambahkan banyak anak sekaligus dari daftar nama yang ditempel/ditulis,
 // satu nama per baris. Opsional tambahkan koma lalu L/P untuk jenis kelamin,
@@ -1866,6 +1915,7 @@ document.getElementById('btnRefresh').onclick = async ()=>{
 
 /* ---------------- Export to Excel ---------------- */
 document.getElementById('btnExport').onclick = exportToExcel;
+document.getElementById('btnBirthdayToday').onclick = openBirthdayModal;
 const genderLabel = g => g==='L' ? 'Laki-laki' : (g==='P' ? 'Perempuan' : '');
 
 async function exportToExcel(){
