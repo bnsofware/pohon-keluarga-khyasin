@@ -1168,7 +1168,7 @@ function doSearch(){
   const match = allPersonsList().find(p => personSearchLabel(p).toLowerCase()===val)
     || allPersonsList().find(p => p.name.toLowerCase()===val)
     || allPersonsList().find(p => p.name.toLowerCase().includes(val));
-  if(match){ historyStack=[]; navigate(match.id); }
+  if(match){ navigate(match.id); }
   else showToast('Nama tidak ditemukan.');
 }
 
