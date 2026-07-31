@@ -149,6 +149,15 @@
   .btn-danger{background:#fff;color:#9C3140;border:1.5px solid #EBC7CC;box-shadow:none;}
   .btn-danger:hover{background:#9C3140;color:#fff;border-color:#9C3140;}
   .btn-small{padding:6px 11px;font-size:12px;border-radius:8px;}
+  .btn-spouse{
+    background:linear-gradient(135deg, var(--pine), var(--pine-dark));
+    color:#F3EFE3;
+    padding:13px 22px;
+    font-size:15px;
+    border-radius:12px;
+    box-shadow:0 8px 20px rgba(46,27,87,0.32);
+  }
+  .btn-spouse:hover{background:linear-gradient(135deg, var(--pine-dark), var(--navy-dark));box-shadow:0 12px 28px rgba(46,27,87,0.42);}
 
   main{max-width:960px;margin:0 auto;padding:30px 16px 10px;}
 
@@ -278,8 +287,8 @@
     transition:border-color .15s, background .15s;
   }
   .empty-slot:hover{border-color:var(--gold);background:#fff;}
-  .empty-slot button{background:none;border:none;color:var(--ink-soft);font-size:13px;cursor:pointer;font-weight:700;}
-  .empty-slot button:hover{color:var(--pine);}
+  .empty-slot button:not(.btn){background:none;border:none;color:var(--ink-soft);font-size:13px;cursor:pointer;font-weight:700;}
+  .empty-slot button:not(.btn):hover{color:var(--pine);}
 
   .spouse-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
   .spouse-tab{
@@ -730,6 +739,13 @@ function yearsLabel(p){
   if(p.birthPlace) return p.birthPlace;
   return range;
 }
+// Baris keterangan tempat dikuburkan, hanya tampil kalau orang ini sudah
+// wafat DAN tempat kuburnya diisi (berguna kalau dikuburkan bukan di
+// kampung/tempat asalnya).
+function burialInfoLine(p){
+  if(!p || !p.deathYear || !p.burialPlace) return '';
+  return '⚰ Dikuburkan di '+escapeHtml(p.burialPlace);
+}
 function avatarHtml(p, size){
   size = size || 38;
   if(p.photo){
@@ -941,7 +957,7 @@ function render(){
     coupleRow.appendChild(personCard(activeSpouse, false));
   }else{
     const slot = document.createElement('div'); slot.className='empty-slot';
-    const btn=document.createElement('button'); btn.textContent='+ Tambah Pasangan';
+    const btn=document.createElement('button'); btn.className='btn btn-spouse'; btn.textContent='+ Tambah Pasangan';
     btn.onclick=()=>openAddModal({mode:'spouse', personId:focus.id});
     slot.appendChild(btn);
     coupleRow.appendChild(slot);
@@ -980,7 +996,7 @@ function render(){
     c.innerHTML = `<div class="child-card-top">
         ${checkboxHtml}
         ${avatarHtml(k, 42)}
-        <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div></div>
+        <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div>${burialInfoLine(k) ? `<div class="years" style="margin-top:1px;">${burialInfoLine(k)}</div>` : ''}</div>
       </div>
       ${childSelectMode ? '' : `<div class="child-card-actions">
         <button class="edit-child-btn" data-action="edit" title="Sunting data ${escapeHtml(k.name)}">Sunting</button>
@@ -1100,6 +1116,7 @@ function personCard(p, isMainFocus, small){
     <div>
       <div class="name ${isMainFocus?'':'clickable'}">${escapeHtml(p.name)}</div>
       <div class="years">${yearsLabel(p)}${yearsLabel(p)?' · ':''}${genBadgeHtml(computeGeneration(p.id))}</div>
+      ${burialInfoLine(p) ? `<div class="years" style="margin-top:2px;">${burialInfoLine(p)}</div>` : ''}
     </div>`;
   if(!isMainFocus){
     head.querySelector('.name').onclick = ()=>navigate(p.id);
@@ -1113,7 +1130,7 @@ function personCard(p, isMainFocus, small){
   editBtn.onclick=(e)=>{ e.stopPropagation(); openEditModal(p.id); };
   actions.appendChild(editBtn);
   if(isMainFocus){
-    const addSp = document.createElement('button'); addSp.className='btn btn-ghost'; addSp.textContent='+ Pasangan';
+    const addSp = document.createElement('button'); addSp.className='btn btn-spouse'; addSp.textContent='+ Pasangan';
     addSp.onclick=(e)=>{e.stopPropagation(); openAddModal({mode:'spouse', personId:p.id});};
     actions.appendChild(addSp);
   }
@@ -1227,6 +1244,10 @@ function openAddModal(ctx){
         <input type="text" id="fDeath" placeholder="cth: 2018 atau 2018-09-03" inputmode="numeric">
         <div class="hint" style="margin-top:3px;">Boleh diisi tahun saja dulu.</div>
       </div>
+      <div class="field"><label>Tempat Dikuburkan (opsional)</label>
+        <input type="text" id="fBurialPlace" placeholder="cth: TPU Karet Bivak, Jakarta">
+        <div class="hint" style="margin-top:3px;">Isi kalau sudah meninggal dan dikuburkan bukan di kampung/tempat asalnya.</div>
+      </div>
       <div class="field">
         <label>Foto (opsional)</label>
         <input type="file" accept="image/*" id="fPhotoInput">
@@ -1304,8 +1325,9 @@ function openAddModal(ctx){
       return;
     }
     const birthPlace = document.getElementById('fBirthPlace').value.trim();
+    const burialPlace = document.getElementById('fBurialPlace').value.trim();
     const newId = uid();
-    const newPerson = { id:newId, name, gender, birthYear, deathYear, birthPlace, photo:pendingPhoto||null, photoPosY:pendingPhotoPosY, fatherId:null, motherId:null, spouseIds:[] };
+    const newPerson = { id:newId, name, gender, birthYear, deathYear, birthPlace, burialPlace, photo:pendingPhoto||null, photoPosY:pendingPhotoPosY, fatherId:null, motherId:null, spouseIds:[] };
 
     // `applyState` dipanggil HANYA setelah data berhasil tersimpan ke server,
     // supaya tampilan (fokus/pasangan aktif yang "ke-load") tidak pernah
@@ -1673,6 +1695,10 @@ function openEditModal(personId){
         <div class="field"><label>Tanggal / Tahun Wafat <span style="font-weight:400;color:var(--ink-soft);">(kosongkan kalau masih hidup — isi hanya jika orang ini sudah meninggal)</span></label>
           <input type="text" id="eDeath" placeholder="cth: 2018 atau 2018-09-03" inputmode="numeric" value="${escapeHtml(p.deathYear||'')}">
         </div>
+        <div class="field"><label>Tempat Dikuburkan (opsional)</label>
+          <input type="text" id="eBurialPlace" placeholder="cth: TPU Karet Bivak, Jakarta" value="${escapeHtml(p.burialPlace||'')}">
+          <div class="hint" style="margin-top:3px;">Isi kalau sudah meninggal dan dikuburkan bukan di kampung/tempat asalnya.</div>
+        </div>
         <div class="field">
           <label>Foto</label>
           <div id="ePhotoPreview" style="margin-bottom:6px;">${p.photo?`<img src="${p.photo}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;object-position:center ${(typeof p.photoPosY==='number')?p.photoPosY:50}%;">`:'<span class="hint">Belum ada foto.</span>'}</div>
@@ -1738,11 +1764,13 @@ function openEditModal(personId){
       return;
     }
     const newBirthPlace = document.getElementById('eBirthPlace').value.trim();
+    const newBurialPlace = document.getElementById('eBurialPlace').value.trim();
     p.name = name;
     p.gender = document.getElementById('eGender').value;
     p.birthYear = newBirth;
     p.deathYear = newDeath;
     p.birthPlace = newBirthPlace;
+    p.burialPlace = newBurialPlace;
     const removeCb = document.getElementById('eRemovePhoto');
     if(eNewPhoto){ p.photo = eNewPhoto; p.photoPosY = ePhotoPosY; }
     else if(removeCb && removeCb.checked){ p.photo = null; p.photoPosY = 50; }
@@ -1854,6 +1882,8 @@ async function exportToExcelWithPhotos(){
     { header: 'Tanggal Lahir', key: 'lahir', width: 12 },
     { header: 'Tempat Lahir', key: 'tempatLahir', width: 18 },
     { header: 'Tanggal Wafat', key: 'wafat', width: 12 },
+    { header: 'Usia', key: 'usia', width: 10 },
+    { header: 'Tempat Dikuburkan', key: 'tempatKubur', width: 22 },
     { header: 'Nama Ayah', key: 'ayah', width: 26 },
     { header: 'Nama Ibu', key: 'ibu', width: 26 },
     { header: 'Pasangan', key: 'pasangan', width: 30 },
@@ -1875,6 +1905,8 @@ async function exportToExcelWithPhotos(){
       lahir: formatDateDisplay(p.birthYear),
       tempatLahir: p.birthPlace || '',
       wafat: formatDateDisplay(p.deathYear),
+      usia: p.birthYear ? (()=>{ const age = calcAge(p.birthYear, p.deathYear||null); return age!==null ? age+' th' : '-'; })() : '-',
+      tempatKubur: p.deathYear ? (p.burialPlace || '') : '',
       ayah: father ? father.name : '',
       ibu: mother ? mother.name : '',
       pasangan: spouseNames
@@ -1923,13 +1955,15 @@ function exportToExcelFallback(){
       'Tanggal Lahir': formatDateDisplay(p.birthYear),
       'Tempat Lahir': p.birthPlace || '',
       'Tanggal Wafat': formatDateDisplay(p.deathYear),
+      'Usia': p.birthYear ? (()=>{ const age = calcAge(p.birthYear, p.deathYear||null); return age!==null ? age+' th' : '-'; })() : '-',
+      'Tempat Dikuburkan': p.deathYear ? (p.burialPlace || '') : '',
       'Nama Ayah': father ? father.name : '',
       'Nama Ibu': mother ? mother.name : '',
       'Pasangan': spouseNames
     };
   });
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:10},{wch:26},{wch:10},{wch:14},{wch:12},{wch:14},{wch:12},{wch:26},{wch:26},{wch:30}];
+  ws['!cols'] = [{wch:10},{wch:26},{wch:10},{wch:14},{wch:12},{wch:14},{wch:12},{wch:10},{wch:22},{wch:26},{wch:26},{wch:30}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Silsilah Keluarga');
   const today = new Date().toISOString().slice(0,10);
