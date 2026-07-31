@@ -999,7 +999,7 @@ function render(){
     c.innerHTML = `<div class="child-card-top">
         ${checkboxHtml}
         ${avatarHtml(k, 42)}
-        <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div>${burialInfoLine(k) ? `<div class="years" style="margin-top:1px;">${burialInfoLine(k)}</div>` : ''}</div>
+        <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div>${burialInfoLine(k) ? `<div class="years" style="margin-top:1px;color:#9C3140;font-weight:700;">${burialInfoLine(k)}</div>` : ''}</div>
       </div>
       ${childSelectMode ? '' : `<div class="child-card-actions">
         <button class="edit-child-btn" data-action="edit" title="Sunting data ${escapeHtml(k.name)}">Sunting</button>
@@ -1119,7 +1119,7 @@ function personCard(p, isMainFocus, small){
     <div>
       <div class="name ${isMainFocus?'':'clickable'}">${escapeHtml(p.name)}</div>
       <div class="years">${yearsLabel(p)}${yearsLabel(p)?' · ':''}${genBadgeHtml(computeGeneration(p.id))}</div>
-      ${burialInfoLine(p) ? `<div class="years" style="margin-top:2px;">${burialInfoLine(p)}</div>` : ''}
+      ${burialInfoLine(p) ? `<div class="years" style="margin-top:2px;color:#9C3140;font-weight:700;">${burialInfoLine(p)}</div>` : ''}
     </div>`;
   if(!isMainFocus){
     head.querySelector('.name').onclick = ()=>navigate(p.id);
