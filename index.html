@@ -830,12 +830,17 @@ function computeGeneration(id, _visited){
   }
   return 1;
 }
-// Label ringkas "Nama (tahun) — Gen X" dipakai di kotak pencarian & pilihan
-// ayah/ibu/pasangan, supaya nama yang sama gampang dibedakan.
+// Label ringkas dipakai di kotak pencarian utama & pilihan ayah/ibu/pasangan,
+// supaya orang dengan nama sama gampang dibedakan. Formatnya:
+// "Nama — Gen X · Lahir 1937 · Tempat Lahir" (bagian lahir/tempat
+// otomatis hilang kalau datanya belum diisi).
 function personSearchLabel(p){
   if(!p) return '';
-  const years = yearsLabel(p);
-  return p.name + (years?(' ('+years+')'):'') + ' — Gen '+computeGeneration(p.id);
+  const gen = computeGeneration(p.id);
+  const parts = ['Gen '+gen];
+  if(p.birthYear) parts.push('Lahir '+formatDateDisplay(p.birthYear));
+  if(p.birthPlace) parts.push(p.birthPlace);
+  return p.name + ' — ' + parts.join(' · ');
 }
 // Mencocokkan teks yang diketik di kotak pencarian (Ayah/Ibu/Pasangan) balik ke ID orangnya.
 function resolvePersonIdFromLabel(text){
