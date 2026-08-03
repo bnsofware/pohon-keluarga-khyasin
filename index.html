@@ -1542,30 +1542,34 @@ function birthdayPeopleToday(){
 function fullNasabLabelHtml(p, color){
   color = color || 'var(--ink)';
   const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
-  if(p.fatherId){
+  if(p.fatherId || p.motherId){
     const chain = [];
     let current = p;
     let guard = 0;
-    while(current.fatherId && guard<30){
-      const father = persons[current.fatherId];
-      if(!father) break;
-      chain.push(father.name);
-      current = father;
+    // Nurutin garis ayah selama tercatat; kalau di satu level ayahnya tidak
+    // tercatat tapi ibunya ada, lanjut lewat ibu supaya rantainya tidak
+    // terputus di tengah jalan (biar leluhur macam Ahmad Junaedi / Diok
+    // Saidah yang cuma tercatat lewat ibu tetap ikut kesebut).
+    while(guard<30){
+      let next = null;
+      if(current.fatherId && persons[current.fatherId]) next = persons[current.fatherId];
+      else if(current.motherId && persons[current.motherId]) next = persons[current.motherId];
+      if(!next) break;
+      chain.push(next.name);
+      current = next;
       guard++;
     }
     if(chain.length){
-      return (p.gender==='P' ? 'Binti ' : 'Bin ') + chain.map(nameSpan).join(' bin ');
+      const firstViaFather = !!(p.fatherId && persons[p.fatherId]);
+      const prefix = firstViaFather ? (p.gender==='P' ? 'Binti ' : 'Bin ') : 'Anak dari ';
+      return prefix + chain.map(nameSpan).join(' bin ');
     }
   }
-  // Tidak punya garis ayah sendiri -> kemungkinan besar pasangan yang menikah
-  // masuk ke keluarga ini, jadi ditandai sebagai pasangan siapa.
+  // Tidak punya garis ayah/ibu sama sekali -> kemungkinan besar pasangan yang
+  // menikah masuk ke keluarga ini, jadi ditandai sebagai pasangan siapa.
   if(p.spouseIds && p.spouseIds.length){
     const spouseNames = p.spouseIds.map(sid=>persons[sid]).filter(Boolean).map(s=>s.name);
     if(spouseNames.length) return 'Pasangan dari '+spouseNames.map(nameSpan).join(' &amp; ');
-  }
-  if(p.motherId){
-    const mother = persons[p.motherId];
-    if(mother) return 'Anak dari '+nameSpan(mother.name);
   }
   return null;
 }
