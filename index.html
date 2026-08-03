@@ -1534,6 +1534,47 @@ function birthdayPeopleToday(){
     .sort((a,b)=>a.name.localeCompare(b.name));
 }
 
+// Label "Bin/Binti [nama ayah]" sesuai jenis kelamin. Kalau ayah tidak
+// tercatat tapi ibu ada, dipakai label netral "anak dari [nama ibu]".
+function binBintiLabel(p){
+  const father = p.fatherId && persons[p.fatherId];
+  if(father){
+    return (p.gender==='P' ? 'Binti ' : 'Bin ') + father.name;
+  }
+  const mother = p.motherId && persons[p.motherId];
+  if(mother) return 'Anak dari ' + mother.name;
+  return null;
+}
+
+// Menelusuri ke atas (lewat jalur ayah dulu, baru ibu) untuk menemukan
+// leluhur Gen 2 (salah satu dari anak KH Yasin) tempat orang ini berasal —
+// jadi ketahuan dia keturunan cabang siapa.
+function traceToGen2Ancestor(personId, visited){
+  visited = visited || new Set();
+  if(!personId || visited.has(personId)) return null;
+  visited.add(personId);
+  const p = persons[personId];
+  if(!p) return null;
+  if(computeGeneration(personId)===2) return p;
+  return (p.fatherId ? traceToGen2Ancestor(p.fatherId, visited) : null)
+      || (p.motherId ? traceToGen2Ancestor(p.motherId, visited) : null);
+}
+
+function lineageInfoHtml(p){
+  const parts = [];
+  const bb = binBintiLabel(p);
+  if(bb) parts.push(escapeHtml(bb));
+  const gen = computeGeneration(p.id);
+  const branchRoot = traceToGen2Ancestor(p.id);
+  if(branchRoot && branchRoot.id!==p.id){
+    parts.push('Cabang keturunan '+escapeHtml(branchRoot.name)+' (Gen '+gen+')');
+  } else if(gen<=2){
+    parts.push('Gen '+gen+(gen===1?' — leluhur/pasangan pendiri':' — anak KH Yasin'));
+  }
+  if(!parts.length) return '';
+  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;">${parts.join(' · ')}</div>`;
+}
+
 function openBirthdayModal(){
   const list = birthdayPeopleToday();
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
@@ -1542,7 +1583,10 @@ function openBirthdayModal(){
     <div class="birthday-item" data-id="${p.id}" style="display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer;">
       <span style="width:24px;text-align:right;font-weight:600;color:var(--ink-soft);flex:none;">${i+1}.</span>
       ${avatarHtml(p,44)}
-      <span style="font-weight:600;color:var(--ink);">${escapeHtml(p.name)}</span>
+      <div style="min-width:0;">
+        <div style="font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</div>
+        ${lineageInfoHtml(p)}
+      </div>
     </div>`).join('') : `<p class="hint">Tidak ada anggota keluarga yang berulang tahun hari ini (yang tanggal lahirnya lengkap tercatat).</p>`;
 
   overlay.innerHTML = `
