@@ -1539,37 +1539,52 @@ function birthdayPeopleToday(){
 // ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
 // Mengembalikan HTML: hanya nama-nama orangnya yang diberi warna (${color}),
 // kata sambung "Bin/Binti/Pasangan dari/Anak dari" tetap warna biasa.
+// Menelusuri ke atas satu orang: prioritas lewat ayah, kalau di satu level
+// ayahnya tidak tercatat tapi ibunya ada, lanjut lewat ibu. Supaya rantainya
+// tidak terputus di tengah jalan hanya karena satu sisi datanya kurang.
+function buildAncestorChain(person){
+  const chain = [];
+  let current = person;
+  let guard = 0;
+  while(guard<30){
+    let next = null;
+    if(current.fatherId && persons[current.fatherId]) next = persons[current.fatherId];
+    else if(current.motherId && persons[current.motherId]) next = persons[current.motherId];
+    if(!next) break;
+    chain.push(next);
+    current = next;
+    guard++;
+  }
+  return chain;
+}
+
 function fullNasabLabelHtml(p, color){
   color = color || 'var(--ink)';
   const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
-  if(p.fatherId || p.motherId){
-    const chain = [];
-    let current = p;
-    let guard = 0;
-    // Nurutin garis ayah selama tercatat; kalau di satu level ayahnya tidak
-    // tercatat tapi ibunya ada, lanjut lewat ibu supaya rantainya tidak
-    // terputus di tengah jalan (biar leluhur macam Ahmad Junaedi / Diok
-    // Saidah yang cuma tercatat lewat ibu tetap ikut kesebut).
-    while(guard<30){
-      let next = null;
-      if(current.fatherId && persons[current.fatherId]) next = persons[current.fatherId];
-      else if(current.motherId && persons[current.motherId]) next = persons[current.motherId];
-      if(!next) break;
-      chain.push(next.name);
-      current = next;
-      guard++;
-    }
-    if(chain.length){
-      const firstViaFather = !!(p.fatherId && persons[p.fatherId]);
-      const prefix = firstViaFather ? (p.gender==='P' ? 'Binti ' : 'Bin ') : 'Anak dari ';
-      return prefix + chain.map(nameSpan).join(' bin ');
-    }
+  const ownChain = buildAncestorChain(p);
+  if(ownChain.length){
+    const firstViaFather = !!(p.fatherId && persons[p.fatherId]);
+    const prefix = firstViaFather ? (p.gender==='P' ? 'Binti ' : 'Bin ') : 'Anak dari ';
+    return prefix + ownChain.map(a=>nameSpan(a.name)).join(' bin ');
   }
   // Tidak punya garis ayah/ibu sama sekali -> kemungkinan besar pasangan yang
-  // menikah masuk ke keluarga ini, jadi ditandai sebagai pasangan siapa.
+  // menikah masuk ke keluarga ini. Tetap ditampilkan siapa dia pasangannya,
+  // DAN rantai nasab pasangan itu juga ikut disebutkan (baik keturunan lewat
+  // ayah maupun ibu si pasangan), supaya tetap kelihatan cabang mana asalnya.
   if(p.spouseIds && p.spouseIds.length){
-    const spouseNames = p.spouseIds.map(sid=>persons[sid]).filter(Boolean).map(s=>s.name);
-    if(spouseNames.length) return 'Pasangan dari '+spouseNames.map(nameSpan).join(' &amp; ');
+    const parts = p.spouseIds.map(sid=>{
+      const spouse = persons[sid];
+      if(!spouse) return null;
+      let html = nameSpan(spouse.name);
+      const spouseChain = buildAncestorChain(spouse);
+      if(spouseChain.length){
+        const spouseFirstViaFather = !!(spouse.fatherId && persons[spouse.fatherId]);
+        const connector = spouseFirstViaFather ? (spouse.gender==='P' ? 'binti ' : 'bin ') : 'anak dari ';
+        html += ' ' + connector + spouseChain.map(a=>nameSpan(a.name)).join(' bin ');
+      }
+      return html;
+    }).filter(Boolean);
+    if(parts.length) return 'Pasangan dari ' + parts.join(' &amp; ');
   }
   return null;
 }
