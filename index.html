@@ -1534,15 +1534,35 @@ function birthdayPeopleToday(){
     .sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-// Label "Bin/Binti [nama ayah]" sesuai jenis kelamin. Kalau ayah tidak
-// tercatat tapi ibu ada, dipakai label netral "anak dari [nama ibu]".
-function binBintiLabel(p){
-  const father = p.fatherId && persons[p.fatherId];
-  if(father){
-    return (p.gender==='P' ? 'Binti ' : 'Bin ') + father.name;
+// Rantai nasab penuh ke atas lewat jalur ayah: "Bin/Binti Fulan bin Fulan bin ...".
+// Berhenti begitu garis ayah putus (mis. sampai KH Yasin yang tidak punya
+// ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
+function fullNasabLabel(p){
+  if(p.fatherId){
+    const chain = [];
+    let current = p;
+    let guard = 0;
+    while(current.fatherId && guard<30){
+      const father = persons[current.fatherId];
+      if(!father) break;
+      chain.push(father.name);
+      current = father;
+      guard++;
+    }
+    if(chain.length){
+      return (p.gender==='P' ? 'Binti ' : 'Bin ') + chain.join(' bin ');
+    }
   }
-  const mother = p.motherId && persons[p.motherId];
-  if(mother) return 'Anak dari ' + mother.name;
+  // Tidak punya garis ayah sendiri -> kemungkinan besar pasangan yang menikah
+  // masuk ke keluarga ini, jadi ditandai sebagai pasangan siapa.
+  if(p.spouseIds && p.spouseIds.length){
+    const spouseNames = p.spouseIds.map(sid=>persons[sid]).filter(Boolean).map(s=>s.name);
+    if(spouseNames.length) return 'Pasangan dari '+spouseNames.join(' & ');
+  }
+  if(p.motherId){
+    const mother = persons[p.motherId];
+    if(mother) return 'Anak dari '+mother.name;
+  }
   return null;
 }
 
@@ -1560,19 +1580,24 @@ function traceToGen2Ancestor(personId, visited){
       || (p.motherId ? traceToGen2Ancestor(p.motherId, visited) : null);
 }
 
+// "Generasi 2" -> "keturunan pertama", dst. Gen 1 = KH Yasin & pasangannya sendiri.
+function generationDescLabel(gen){
+  if(gen<=1) return 'Generasi awal (KH Yasin &amp; pasangan)';
+  return 'Keturunan ke-'+(gen-1)+' dari KH Yasin (Generasi '+gen+')';
+}
+
 function lineageInfoHtml(p){
   const parts = [];
-  const bb = binBintiLabel(p);
-  if(bb) parts.push(escapeHtml(bb));
+  const nasab = fullNasabLabel(p);
+  if(nasab) parts.push(escapeHtml(nasab));
   const gen = computeGeneration(p.id);
+  parts.push(generationDescLabel(gen));
   const branchRoot = traceToGen2Ancestor(p.id);
-  if(branchRoot && branchRoot.id!==p.id){
-    parts.push('Cabang keturunan '+escapeHtml(branchRoot.name)+' (Gen '+gen+')');
-  } else if(gen<=2){
-    parts.push('Gen '+gen+(gen===1?' — leluhur/pasangan pendiri':' — anak KH Yasin'));
+  if(branchRoot && branchRoot.id!==p.id && gen>2){
+    parts.push('Cabang '+escapeHtml(branchRoot.name));
   }
   if(!parts.length) return '';
-  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;">${parts.join(' · ')}</div>`;
+  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
 }
 
 function openBirthdayModal(){
