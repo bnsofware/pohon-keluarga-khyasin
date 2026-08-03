@@ -374,6 +374,8 @@
   .modal-foot{padding:18px 22px 22px;display:flex;justify-content:flex-end;gap:10px;}
   .tabbar{display:flex;gap:6px;padding:0 22px;margin-top:4px;}
   .tabbtn{flex:1;padding:9px;border-radius:9px;border:1.5px solid #E3DCC7;background:#fff;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-soft);transition:all .15s;}
+  .tabbar.dash-tabbar{overflow-x:auto;}
+  .tabbar.dash-tabbar .tabbtn{flex:none;white-space:nowrap;}
   .tabbtn.active{background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;border-color:var(--pine-dark);}
   .hint{font-size:11.5px;color:var(--ink-soft);}
   .radio-opt{display:flex;align-items:center;gap:8px;font-size:13.5px;}
@@ -1477,9 +1479,39 @@ function openAddModal(ctx){
   };
 }
 
+// ---- Integrasi tombol "Kembali" HP dengan modal ----
+// Setiap kali modal (id="modalOverlay") dibuka, kita "dorong" satu entri
+// history palsu. Kalau pengguna menekan tombol kembali di HP, browser akan
+// memicu event popstate SEBELUM benar-benar keluar dari halaman/app; di
+// situ kita tangkap dan cukup tutup modalnya, bukan keluar dari aplikasi.
+// Kalau modal ditutup lewat cara biasa (tombol Tutup/Batal, klik di luar
+// modal), kita "konsumsi" entri history palsu itu lewat history.back()
+// supaya tombol kembali fisik tidak jadi harus ditekan dua kali nanti.
+let modalHistoryPushed = false;
+new MutationObserver(mutations=>{
+  mutations.forEach(m=>{
+    m.addedNodes.forEach(node=>{
+      if(node.nodeType===1 && node.id==='modalOverlay' && !modalHistoryPushed){
+        modalHistoryPushed = true;
+        history.pushState({ftModal:true}, '');
+      }
+    });
+  });
+}).observe(document.body, {childList:true});
+
+window.addEventListener('popstate', ()=>{
+  const ov = document.getElementById('modalOverlay');
+  if(ov){ ov.remove(); }
+  modalHistoryPushed = false;
+});
+
 function closeModal(){
   const ov = document.getElementById('modalOverlay');
   if(ov) ov.remove();
+  if(modalHistoryPushed){
+    modalHistoryPushed = false;
+    history.back();
+  }
 }
 
 /* ---------------- Ulang Tahun Hari Ini ---------------- */
@@ -1616,21 +1648,38 @@ function metricBarHtml(label, pct){
     </div>`;
 }
 
-function openCompletenessDashboard(){
-  const branches = findGen2Branches();
-  if(!branches.length){
-    showToast('Tidak ditemukan anggota Gen 2 (anak dari leluhur Gen 1) di data saat ini.');
-    return;
-  }
-  const rows = branches.map(root=>{
-    const members = collectBranchMembers(root.id);
+function maxGeneration(){
+  let max=1;
+  Object.keys(persons).forEach(id=>{
+    const g = computeGeneration(id);
+    if(g>max) max = g;
+  });
+  return max;
+}
+
+// Menghitung baris (per cabang) untuk satu tab dashboard.
+// tab === 'semua'  -> seluruh anggota cabang, lintas generasi (perilaku lama)
+// tab === angka N  -> hanya anggota cabang yang generasinya persis N
+function computeDashboardRows(branches, tab){
+  return branches.map(root=>{
+    let members = collectBranchMembers(root.id);
+    if(tab!=='semua'){
+      members = members.filter(m=>computeGeneration(m.id)===tab);
+    }
     const stats = branchStats(members);
     return {root, stats};
-  }).sort((a,b)=> b.stats.overallPct - a.stats.overallPct);
+  }).filter(r=> tab==='semua' || r.stats.total>0)
+    .sort((a,b)=> b.stats.overallPct - a.stats.overallPct);
+}
 
-  const cardsHtml = rows.map((r,i)=>{
+function dashboardCardsHtml(rows, tab){
+  if(!rows.length){
+    return `<p class="hint">Belum ada anggota tercatat pada generasi ini.</p>`;
+  }
+  return rows.map((r,i)=>{
     const {root, stats} = r;
     const color = barColor(stats.overallPct);
+    const subLabel = tab==='semua' ? (stats.total+' anggota (seluruh cabang)') : (stats.total+' anggota di generasi ini');
     return `
     <div class="branch-card" data-id="${root.id}">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
@@ -1638,7 +1687,7 @@ function openCompletenessDashboard(){
         ${avatarHtml(root,40)}
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(root.name)}</div>
-          <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota (cabang keluarga)</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);">${subLabel}</div>
         </div>
         <div style="text-align:center;flex:none;">
           <div style="font-size:20px;font-weight:800;color:${color};">${stats.overallPct}%</div>
@@ -1648,20 +1697,35 @@ function openCompletenessDashboard(){
       ${metricBarHtml('Foto tersedia', stats.fotoPct)}
       ${metricBarHtml('Tanggal lahir lengkap', stats.tglPct)}
       ${metricBarHtml('Tempat lahir terisi', stats.tempatPct)}
-      ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anggota yang tercatat wafat di cabang ini.</div>'}
+      ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anggota yang tercatat wafat di sini.</div>'}
     </div>`;
   }).join('');
+}
+
+function openCompletenessDashboard(){
+  const branches = findGen2Branches();
+  if(!branches.length){
+    showToast('Tidak ditemukan anggota Gen 2 (anak dari leluhur Gen 1) di data saat ini.');
+    return;
+  }
+  const maxGen = maxGeneration();
+  // Tab dimulai dari Gen 2 (titik cabang) sampai generasi terakhir yang ada datanya.
+  // Gen 1 (leluhur/pasangan pendiri) tidak punya "cabang" untuk dibandingkan,
+  // jadi cukup diwakili tab "Semua Cabang" yang merangkum semuanya.
+  const tabs = ['semua'];
+  for(let g=2; g<=maxGen; g++) tabs.push(g);
 
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
+  const tabBtnsHtml = tabs.map(t=>`<button class="tabbtn${t==='semua'?' active':''}" data-tab="${t}">${t==='semua'?'Semua Cabang':'Gen '+t}</button>`).join('');
+
   overlay.innerHTML = `
     <div class="modal modal-wide">
       <div class="modal-head">
         <h3>📊 Dashboard Kelengkapan Data per Cabang</h3>
-        <p>Perbandingan antar ${branches.length} anak Gen 2, dihitung dari seluruh anak-cucu &amp; pasangan di masing-masing cabang. Diurutkan dari yang paling lengkap.</p>
+        <p id="dashDesc"></p>
       </div>
-      <div class="modal-body" style="max-height:520px;overflow:auto;display:flex;flex-direction:column;gap:12px;">
-        ${cardsHtml}
-        <p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat. Klik salah satu cabang untuk membuka & melengkapi datanya.</p>
+      <div class="tabbar dash-tabbar" style="padding-bottom:2px;">${tabBtnsHtml}</div>
+      <div class="modal-body" id="dashBody" style="max-height:480px;overflow:auto;display:flex;flex-direction:column;gap:12px;margin-top:10px;">
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" id="cancelBtn">Tutup</button>
@@ -1670,9 +1734,30 @@ function openCompletenessDashboard(){
   document.body.appendChild(overlay);
   document.getElementById('cancelBtn').onclick = closeModal;
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
-  overlay.querySelectorAll('.branch-card').forEach(el=>{
-    el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+
+  function renderTab(tab){
+    overlay.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.getAttribute('data-tab')===String(tab)));
+    const rows = computeDashboardRows(branches, tab);
+    const desc = tab==='semua'
+      ? `Perbandingan antar ${branches.length} anak Gen 2, dihitung dari seluruh anak-cucu & pasangan di masing-masing cabang, lintas semua generasi.`
+      : `Perbandingan antar cabang, khusus anggota yang berada di Generasi ${tab}.`;
+    document.getElementById('dashDesc').textContent = desc;
+    const body = document.getElementById('dashBody');
+    body.innerHTML = dashboardCardsHtml(rows, tab) +
+      `<p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat. Klik salah satu cabang untuk membuka & melengkapi datanya.</p>`;
+    body.querySelectorAll('.branch-card').forEach(el=>{
+      el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+    });
+  }
+
+  overlay.querySelectorAll('.tabbtn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const raw = btn.getAttribute('data-tab');
+      renderTab(raw==='semua' ? 'semua' : Number(raw));
+    };
   });
+
+  renderTab('semua');
 }
 
 /* ---------------- Bulk Add Children Modal ---------------- */
