@@ -1600,8 +1600,32 @@ function lineageInfoHtml(p){
   return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
 }
 
+// Palet warna hangat yang senada dengan tema navy-gold aplikasi ini, satu
+// warna dikunci untuk satu cabang (anak KH Yasin) supaya konsisten tiap
+// kali dibuka, dan enak dipandang / mudah dibedakan sekilas.
+function branchColorPalette(){
+  return ['#B5482B','#2E6F6E','#8C6A1E','#6B3F73','#3F6B35','#39547A','#A3462F','#7A5B2E'];
+}
+function getBranchColorMap(){
+  const palette = branchColorPalette();
+  const map = {};
+  findGen2Branches().forEach((b,i)=>{ map[b.id] = palette[i % palette.length]; });
+  return map;
+}
+// Warna nama seseorang: mengikuti warna cabang leluhurnya (Gen 2 yang
+// bersangkutan); leluhur pendiri (Gen 1) dapat warna emas tersendiri.
+function personNameColor(p, branchColorMap){
+  const gen = computeGeneration(p.id);
+  if(gen<=1) return 'var(--gold-dark, var(--gold))';
+  if(branchColorMap[p.id]) return branchColorMap[p.id];
+  const root = traceToGen2Ancestor(p.id);
+  if(root && branchColorMap[root.id]) return branchColorMap[root.id];
+  return 'var(--ink)';
+}
+
 function openBirthdayModal(){
   const list = birthdayPeopleToday();
+  const branchColorMap = getBranchColorMap();
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
 
   const itemsHtml = list.length ? list.map((p,i)=>`
@@ -1609,7 +1633,7 @@ function openBirthdayModal(){
       <span style="width:24px;text-align:right;font-weight:600;color:var(--ink-soft);flex:none;">${i+1}.</span>
       ${avatarHtml(p,44)}
       <div style="min-width:0;">
-        <div style="font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</div>
+        <div style="font-weight:700;color:${personNameColor(p,branchColorMap)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</div>
         ${lineageInfoHtml(p)}
       </div>
     </div>`).join('') : `<p class="hint">Tidak ada anggota keluarga yang berulang tahun hari ini (yang tanggal lahirnya lengkap tercatat).</p>`;
