@@ -1657,38 +1657,27 @@ function maxGeneration(){
   return max;
 }
 
-// Menghitung baris (per cabang) untuk satu tab dashboard.
-// tab === 'semua'  -> seluruh anggota cabang, lintas generasi (perilaku lama)
-// tab === angka N  -> hanya anggota cabang yang generasinya persis N
-function computeDashboardRows(branches, tab){
-  return branches.map(root=>{
-    let members = collectBranchMembers(root.id);
-    if(tab!=='semua'){
-      members = members.filter(m=>computeGeneration(m.id)===tab);
-    }
-    const stats = branchStats(members);
-    return {root, stats};
-  }).filter(r=> tab==='semua' || r.stats.total>0)
-    .sort((a,b)=> b.stats.overallPct - a.stats.overallPct);
+// Mengelompokkan anggota satu cabang menurut generasinya masing-masing
+// (Gen 2 = orang itu sendiri, Gen 3 = anak-anaknya, Gen 4 = cucu, dst),
+// lalu menghitung skor kelengkapan per generasi tsb.
+function computeBranchGenerationRows(root){
+  const members = collectBranchMembers(root.id);
+  const byGen = {};
+  members.forEach(m=>{
+    const g = computeGeneration(m.id);
+    if(!byGen[g]) byGen[g] = [];
+    byGen[g].push(m);
+  });
+  return Object.keys(byGen).map(Number).sort((a,b)=>a-b)
+    .map(g=>({ gen:g, stats: branchStats(byGen[g]) }));
 }
 
-function dashboardCardsHtml(rows, tab){
-  if(!rows.length){
-    return `<p class="hint">Belum ada anggota tercatat pada generasi ini.</p>`;
-  }
-  return rows.map((r,i)=>{
-    const {root, stats} = r;
-    const color = barColor(stats.overallPct);
-    const subLabel = tab==='semua' ? (stats.total+' anggota (seluruh cabang)') : (stats.total+' anggota di generasi ini');
-    return `
-    <div class="branch-card" data-id="${root.id}">
+function metricCardHtml({headerHtml, stats, clickId}){
+  const color = barColor(stats.overallPct);
+  return `
+    <div class="branch-card"${clickId?` data-id="${clickId}"`:''}>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-        <span style="width:22px;text-align:right;font-weight:700;color:var(--ink-soft);flex:none;">${i+1}.</span>
-        ${avatarHtml(root,40)}
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(root.name)}</div>
-          <div style="font-size:11.5px;color:var(--ink-soft);">${subLabel}</div>
-        </div>
+        ${headerHtml}
         <div style="text-align:center;flex:none;">
           <div style="font-size:20px;font-weight:800;color:${color};">${stats.overallPct}%</div>
           <div style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Skor</div>
@@ -1699,6 +1688,42 @@ function dashboardCardsHtml(rows, tab){
       ${metricBarHtml('Tempat lahir terisi', stats.tempatPct)}
       ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anggota yang tercatat wafat di sini.</div>'}
     </div>`;
+}
+
+// Tab "Semua Cabang": satu kartu per cabang (ringkasan lintas generasi).
+function overviewCardsHtml(branches){
+  const rows = branches.map(root=>{
+    const stats = branchStats(collectBranchMembers(root.id));
+    return {root, stats};
+  }).sort((a,b)=> b.stats.overallPct - a.stats.overallPct);
+
+  return rows.map((r,i)=>{
+    const {root, stats} = r;
+    const headerHtml = `
+      <span style="width:22px;text-align:right;font-weight:700;color:var(--ink-soft);flex:none;">${i+1}.</span>
+      ${avatarHtml(root,40)}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(root.name)}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota (seluruh cabang, semua generasi)</div>
+      </div>`;
+    return metricCardHtml({headerHtml, stats, clickId:root.id});
+  }).join('');
+}
+
+// Tab satu cabang tertentu: satu kartu per generasi DI DALAM cabang itu
+// (Gen 2 = dia sendiri, Gen 3 = anak-anaknya, Gen 4 = cucu, dst).
+function branchDetailCardsHtml(root){
+  const genRows = computeBranchGenerationRows(root);
+  if(!genRows.length) return `<p class="hint">Belum ada anggota tercatat di cabang ini.</p>`;
+  return genRows.map(({gen, stats})=>{
+    const isRootGen = gen===computeGeneration(root.id);
+    const headerHtml = `
+      <div style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;">G${gen}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:var(--ink);">Generasi ${gen}${isRootGen ? ' (dirinya sendiri)' : ''}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota di generasi ini</div>
+      </div>`;
+    return metricCardHtml({headerHtml, stats});
   }).join('');
 }
 
@@ -1708,15 +1733,11 @@ function openCompletenessDashboard(){
     showToast('Tidak ditemukan anggota Gen 2 (anak dari leluhur Gen 1) di data saat ini.');
     return;
   }
-  const maxGen = maxGeneration();
-  // Tab dimulai dari Gen 2 (titik cabang) sampai generasi terakhir yang ada datanya.
-  // Gen 1 (leluhur/pasangan pendiri) tidak punya "cabang" untuk dibandingkan,
-  // jadi cukup diwakili tab "Semua Cabang" yang merangkum semuanya.
-  const tabs = ['semua'];
-  for(let g=2; g<=maxGen; g++) tabs.push(g);
 
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
-  const tabBtnsHtml = tabs.map(t=>`<button class="tabbtn${t==='semua'?' active':''}" data-tab="${t}">${t==='semua'?'Semua Cabang':'Gen '+t}</button>`).join('');
+  const tabBtnsHtml = ['<button class="tabbtn active" data-tab="semua">Semua Cabang</button>']
+    .concat(branches.map(b=>`<button class="tabbtn" data-tab="${b.id}">${escapeHtml(b.name)}</button>`))
+    .join('');
 
   overlay.innerHTML = `
     <div class="modal modal-wide">
@@ -1735,26 +1756,29 @@ function openCompletenessDashboard(){
   document.getElementById('cancelBtn').onclick = closeModal;
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 
-  function renderTab(tab){
-    overlay.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.getAttribute('data-tab')===String(tab)));
-    const rows = computeDashboardRows(branches, tab);
-    const desc = tab==='semua'
-      ? `Perbandingan antar ${branches.length} anak Gen 2, dihitung dari seluruh anak-cucu & pasangan di masing-masing cabang, lintas semua generasi.`
-      : `Perbandingan antar cabang, khusus anggota yang berada di Generasi ${tab}.`;
-    document.getElementById('dashDesc').textContent = desc;
+  function renderTab(tabId){
+    overlay.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.getAttribute('data-tab')===tabId));
     const body = document.getElementById('dashBody');
-    body.innerHTML = dashboardCardsHtml(rows, tab) +
-      `<p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat. Klik salah satu cabang untuk membuka & melengkapi datanya.</p>`;
-    body.querySelectorAll('.branch-card').forEach(el=>{
+    let html, desc;
+
+    if(tabId==='semua'){
+      desc = `Ringkasan ${branches.length} cabang (anak Gen 2 dari KH Yasin), dihitung dari seluruh anak-cucu &amp; pasangan di masing-masing cabang. Klik satu cabang untuk membuka datanya, atau klik tab nama cabang di atas untuk lihat rincian per generasi.`;
+      html = overviewCardsHtml(branches);
+    } else {
+      const root = persons[tabId];
+      desc = `Rincian kelengkapan data cabang <strong>${escapeHtml(root.name)}</strong>, per generasi (Gen ${computeGeneration(root.id)} = dirinya sendiri, generasi berikutnya = anak, cucu, dst).`;
+      html = branchDetailCardsHtml(root);
+    }
+    document.getElementById('dashDesc').innerHTML = desc;
+    body.innerHTML = html +
+      `<p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat.</p>`;
+    body.querySelectorAll('.branch-card[data-id]').forEach(el=>{
       el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
     });
   }
 
   overlay.querySelectorAll('.tabbtn').forEach(btn=>{
-    btn.onclick = ()=>{
-      const raw = btn.getAttribute('data-tab');
-      renderTab(raw==='semua' ? 'semua' : Number(raw));
-    };
+    btn.onclick = ()=> renderTab(btn.getAttribute('data-tab'));
   });
 
   renderTab('semua');
