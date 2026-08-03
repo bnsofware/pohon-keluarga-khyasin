@@ -1539,17 +1539,43 @@ function birthdayPeopleToday(){
 // ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
 // Mengembalikan HTML: hanya nama-nama orangnya yang diberi warna (${color}),
 // kata sambung "Bin/Binti/Pasangan dari/Anak dari" tetap warna biasa.
-// "Bin/Binti" cuma satu tingkat ke ORANG TUA LANGSUNG (bukan dirantai sampai
-// KH Yasin) — sambungannya ke Gen 2 KH Yasin sudah cukup diwakili baris
-// "Keturunan ke-N ... · Cabang [nama cabang]" di bawahnya, supaya tidak
-// dobel sebut nama yang sama dua kali dan tidak aneh soal gender di tengah.
-function immediateParentLabelHtml(p, color){
-  const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
-  if(p.fatherId && persons[p.fatherId]){
-    return (p.gender==='P' ? 'Binti ' : 'Bin ') + nameSpan(persons[p.fatherId].name);
+// Rantai nasab ke atas melalui jalur ayah/ibu (prioritas ayah, fallback ibu
+// kalau ayahnya tidak tercatat), dipakai untuk menyusun jalur ke KH Yasin.
+function buildAncestorChain(person){
+  const chain = [];
+  let current = person;
+  let guard = 0;
+  while(guard<30){
+    let next = null;
+    if(current.fatherId && persons[current.fatherId]) next = persons[current.fatherId];
+    else if(current.motherId && persons[current.motherId]) next = persons[current.motherId];
+    if(!next) break;
+    chain.push(next);
+    current = next;
+    guard++;
   }
-  if(p.motherId && persons[p.motherId]){
-    return 'Anak dari ' + nameSpan(persons[p.motherId].name);
+  return chain;
+}
+
+// Menelusuri jalur ke KH Yasin (Gen 1): prioritas lewat ayah, kalau ayahnya
+// tidak tercatat baru dicoba lewat ibu — supaya keturunan yang garis ke
+// KH Yasin-nya lewat pihak PEREMPUAN (ibu/nenek) tetap ketemu jalurnya,
+// bukan cuma yang lewat pihak laki-laki.
+function findPathToGen1(person, visited){
+  visited = visited || new Set();
+  if(!person || visited.has(person.id)) return null;
+  visited.add(person.id);
+
+  const gen = computeGeneration(person.id);
+  if(gen === 1) return { path: [person], via: 'self' };
+
+  if(person.fatherId && persons[person.fatherId]){
+    const result = findPathToGen1(persons[person.fatherId], visited);
+    if(result){ result.path.unshift(person); result.via = 'father'; return result; }
+  }
+  if(person.motherId && persons[person.motherId]){
+    const result = findPathToGen1(persons[person.motherId], visited);
+    if(result){ result.path.unshift(person); result.via = 'mother'; return result; }
   }
   return null;
 }
@@ -1557,19 +1583,43 @@ function immediateParentLabelHtml(p, color){
 function fullNasabLabelHtml(p, color){
   color = color || 'var(--ink)';
   const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
-  const own = immediateParentLabelHtml(p, color);
-  if(own) return own;
-  // Tidak punya data ayah/ibu sama sekali -> kemungkinan besar pasangan yang
-  // menikah masuk. Tampilkan namanya + satu tingkat orang tua pasangan itu
-  // (kalau ada), sambungan selanjutnya ke Gen 2 cukup lewat baris "Cabang".
+
+  const result = findPathToGen1(p);
+
+  // KASUS 1: orang ini punya jalur sampai ke KH Yasin (anak/cucu/dst).
+  if(result && result.path.length > 1){
+    const path = result.path;
+    const via = result.via;
+    const names = path.slice(1).map(a => nameSpan(a.name));
+    if(via === 'father'){
+      const prefix = p.gender === 'P' ? 'Binti ' : 'Bin ';
+      return prefix + names.join(' bin ');
+    } else if(via === 'mother'){
+      return 'Anak dari ' + names.join(' binti ');
+    }
+    return null; // dia sendiri Gen 1 (KH Yasin)
+  }
+
+  // KASUS 2: tidak punya jalur sendiri -> kemungkinan besar pasangan yang
+  // menikah masuk. Tampilkan pasangannya BESERTA jalur nasab pasangan itu.
   if(p.spouseIds && p.spouseIds.length){
     const parts = p.spouseIds.map(sid=>{
       const spouse = persons[sid];
       if(!spouse) return null;
-      let html = nameSpan(spouse.name);
-      const spouseParent = immediateParentLabelHtml(spouse, color);
-      if(spouseParent) html += ' ' + spouseParent.charAt(0).toLowerCase() + spouseParent.slice(1);
-      return html;
+      const spouseResult = findPathToGen1(spouse);
+      if(spouseResult && spouseResult.path.length > 1){
+        const path = spouseResult.path;
+        const via = spouseResult.via;
+        const names = path.slice(1).map(a => nameSpan(a.name));
+        if(via === 'father'){
+          const prefix = spouse.gender === 'P' ? 'binti ' : 'bin ';
+          return nameSpan(spouse.name) + ' ' + prefix + names.join(' bin ');
+        } else if(via === 'mother'){
+          return nameSpan(spouse.name) + ' anak dari ' + names.join(' binti ');
+        }
+        return nameSpan(spouse.name);
+      }
+      return nameSpan(spouse.name);
     }).filter(Boolean);
     if(parts.length) return 'Pasangan dari ' + parts.join(' &amp; ');
   }
@@ -1578,7 +1628,7 @@ function fullNasabLabelHtml(p, color){
 
 // Menelusuri ke atas (lewat jalur ayah dulu, baru ibu) untuk menemukan
 // leluhur Gen 2 (salah satu dari anak KH Yasin) tempat orang ini berasal —
-// jadi ketahuan dia keturunan cabang siapa.
+// dipakai untuk menentukan warna nama sesuai cabangnya.
 function traceToGen2Ancestor(personId, visited){
   visited = visited || new Set();
   if(!personId || visited.has(personId)) return null;
@@ -1592,7 +1642,7 @@ function traceToGen2Ancestor(personId, visited){
 
 // Sama seperti traceToGen2Ancestor, tapi kalau orang ini sendiri tidak
 // punya garis ayah/ibu (biasanya karena dia pasangan yang menikah masuk),
-// cabangnya ikut ditelusuri lewat pasangannya.
+// cabangnya ikut ditelusuri lewat pasangannya. Dipakai untuk pewarnaan nama.
 function resolveBranchRoot(personId, visited){
   visited = visited || new Set();
   if(!personId || visited.has(personId)) return null;
@@ -1614,8 +1664,10 @@ function generationDescLabel(gen){
   return 'Keturunan ke-'+(gen-1)+' dari KH Yasin (Generasi '+gen+')';
 }
 
-// Baris info di bawah nama: teksnya tetap abu-abu biasa, hanya nama-nama
-// orang di dalamnya (nasab, pasangan, nama cabang) yang diberi warna ${color}.
+// Baris info di bawah nama, KHUSUS dipakai di popup Ulang Tahun saja.
+// Rantai nasab (fullNasabLabelHtml) sudah berakhir di nama cabang/KH Yasin
+// sendiri, jadi baris "Cabang" terpisah sengaja TIDAK ditambahkan lagi di
+// sini supaya tidak dobel sebut nama yang sama.
 function lineageInfoHtml(p, color){
   color = color || 'var(--ink)';
   const parts = [];
@@ -1623,14 +1675,6 @@ function lineageInfoHtml(p, color){
   if(nasabHtml) parts.push(nasabHtml);
   const gen = computeGeneration(p.id);
   parts.push(generationDescLabel(gen));
-  const branchRoot = resolveBranchRoot(p.id);
-  // Jangan sebut nama cabang lagi kalau dia sudah muncul di baris bin/binti
-  // di atas (mis. orang Gen 3 yang ayahnya persis si cabang itu sendiri).
-  const alreadyNamedAbove = branchRoot && (branchRoot.id===p.fatherId || branchRoot.id===p.motherId
-    || (p.spouseIds||[]).some(sid=>branchRoot.id===persons[sid]?.fatherId || branchRoot.id===persons[sid]?.motherId));
-  if(branchRoot && branchRoot.id!==p.id && gen>2 && !alreadyNamedAbove){
-    parts.push('Cabang <span style="color:'+color+';font-weight:600;">'+escapeHtml(branchRoot.name)+'</span>');
-  }
   if(!parts.length) return '';
   return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
 }
