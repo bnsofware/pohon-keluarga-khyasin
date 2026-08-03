@@ -363,6 +363,12 @@
   .branch-bar-track{height:8px;border-radius:5px;background:#E4DFCF;overflow:hidden;}
   .branch-bar-fill{height:100%;border-radius:5px;}
   .branch-metric-label{font-size:11px;color:var(--ink-soft);display:flex;justify-content:space-between;margin-bottom:3px;}
+  .gen-details summary{list-style:none;cursor:pointer;position:relative;padding-right:20px;}
+  .gen-details summary::-webkit-details-marker{display:none;}
+  .gen-details summary::marker{content:'';}
+  .gen-details summary:after{content:'▾';position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12px;}
+  .gen-details[open] summary:after{content:'▴';}
+  .gen-details[open]{padding-bottom:14px;}
   @keyframes modalPop{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
   .modal-head{padding:20px 22px 6px;}
   .modal-head h3{margin:0;font-size:21px;color:var(--ink);}
@@ -1715,15 +1721,28 @@ function overviewCardsHtml(branches){
 function branchDetailCardsHtml(root){
   const genRows = computeBranchGenerationRows(root);
   if(!genRows.length) return `<p class="hint">Belum ada anggota tercatat di cabang ini.</p>`;
-  return genRows.map(({gen, stats})=>{
+  return genRows.map(({gen, stats}, idx)=>{
     const isRootGen = gen===computeGeneration(root.id);
-    const headerHtml = `
-      <div style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;">G${gen}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;color:var(--ink);">Generasi ${gen}${isRootGen ? ' (dirinya sendiri)' : ''}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota di generasi ini</div>
-      </div>`;
-    return metricCardHtml({headerHtml, stats});
+    const color = barColor(stats.overallPct);
+    return `
+    <details class="branch-card gen-details"${idx===0?' open':''}>
+      <summary>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px;background:linear-gradient(135deg, var(--pine), var(--pine-dark));color:#F3EFE3;">G${gen}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;color:var(--ink);">Generasi ${gen}${isRootGen ? ' (dirinya sendiri)' : ''}</div>
+            <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anggota di generasi ini</div>
+          </div>
+          <div style="font-size:17px;font-weight:800;color:${color};flex:none;">${stats.overallPct}%</div>
+        </div>
+      </summary>
+      <div style="margin-top:12px;">
+        ${metricBarHtml('Foto tersedia', stats.fotoPct)}
+        ${metricBarHtml('Tanggal lahir lengkap', stats.tglPct)}
+        ${metricBarHtml('Tempat lahir terisi', stats.tempatPct)}
+        ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anggota yang tercatat wafat di sini.</div>'}
+      </div>
+    </details>`;
   }).join('');
 }
 
