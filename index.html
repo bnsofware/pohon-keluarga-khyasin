@@ -1580,6 +1580,24 @@ function traceToGen2Ancestor(personId, visited){
       || (p.motherId ? traceToGen2Ancestor(p.motherId, visited) : null);
 }
 
+// Sama seperti traceToGen2Ancestor, tapi kalau orang ini sendiri tidak
+// punya garis ayah/ibu (biasanya karena dia pasangan yang menikah masuk),
+// cabangnya ikut ditelusuri lewat pasangannya.
+function resolveBranchRoot(personId, visited){
+  visited = visited || new Set();
+  if(!personId || visited.has(personId)) return null;
+  visited.add(personId);
+  const direct = traceToGen2Ancestor(personId, new Set());
+  if(direct) return direct;
+  const p = persons[personId];
+  if(!p || !p.spouseIds) return null;
+  for(const sid of p.spouseIds){
+    const viaSpouse = resolveBranchRoot(sid, visited);
+    if(viaSpouse) return viaSpouse;
+  }
+  return null;
+}
+
 // "Generasi 2" -> "keturunan pertama", dst. Gen 1 = KH Yasin & pasangannya sendiri.
 function generationDescLabel(gen){
   if(gen<=1) return 'Generasi awal (KH Yasin &amp; pasangan)';
@@ -1592,7 +1610,7 @@ function lineageInfoHtml(p){
   if(nasab) parts.push(escapeHtml(nasab));
   const gen = computeGeneration(p.id);
   parts.push(generationDescLabel(gen));
-  const branchRoot = traceToGen2Ancestor(p.id);
+  const branchRoot = resolveBranchRoot(p.id);
   if(branchRoot && branchRoot.id!==p.id && gen>2){
     parts.push('Cabang '+escapeHtml(branchRoot.name));
   }
@@ -1618,7 +1636,7 @@ function personNameColor(p, branchColorMap){
   const gen = computeGeneration(p.id);
   if(gen<=1) return 'var(--gold-dark, var(--gold))';
   if(branchColorMap[p.id]) return branchColorMap[p.id];
-  const root = traceToGen2Ancestor(p.id);
+  const root = resolveBranchRoot(p.id);
   if(root && branchColorMap[root.id]) return branchColorMap[root.id];
   return 'var(--ink)';
 }
