@@ -1604,7 +1604,7 @@ function generationDescLabel(gen){
   return 'Keturunan ke-'+(gen-1)+' dari KH Yasin (Generasi '+gen+')';
 }
 
-function lineageInfoHtml(p){
+function lineageInfoHtml(p, color){
   const parts = [];
   const nasab = fullNasabLabel(p);
   if(nasab) parts.push(escapeHtml(nasab));
@@ -1615,7 +1615,8 @@ function lineageInfoHtml(p){
     parts.push('Cabang '+escapeHtml(branchRoot.name));
   }
   if(!parts.length) return '';
-  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
+  const c = color || 'var(--ink-soft)';
+  return `<div style="font-size:11.5px;color:${c};opacity:.85;margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
 }
 
 // Palet warna hangat yang senada dengan tema navy-gold aplikasi ini, satu
@@ -1646,15 +1647,18 @@ function openBirthdayModal(){
   const branchColorMap = getBranchColorMap();
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
 
-  const itemsHtml = list.length ? list.map((p,i)=>`
+  const itemsHtml = list.length ? list.map((p,i)=>{
+    const color = personNameColor(p, branchColorMap);
+    return `
     <div class="birthday-item" data-id="${p.id}" style="display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer;">
       <span style="width:24px;text-align:right;font-weight:600;color:var(--ink-soft);flex:none;">${i+1}.</span>
       ${avatarHtml(p,44)}
       <div style="min-width:0;">
-        <div style="font-weight:700;color:${personNameColor(p,branchColorMap)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</div>
-        ${lineageInfoHtml(p)}
+        <div style="font-weight:700;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</div>
+        ${lineageInfoHtml(p, color)}
       </div>
-    </div>`).join('') : `<p class="hint">Tidak ada anggota keluarga yang berulang tahun hari ini (yang tanggal lahirnya lengkap tercatat).</p>`;
+    </div>`;
+  }).join('') : `<p class="hint">Tidak ada anggota keluarga yang berulang tahun hari ini (yang tanggal lahirnya lengkap tercatat).</p>`;
 
   overlay.innerHTML = `
     <div class="modal">
