@@ -1537,7 +1537,11 @@ function birthdayPeopleToday(){
 // Rantai nasab penuh ke atas lewat jalur ayah: "Bin/Binti Fulan bin Fulan bin ...".
 // Berhenti begitu garis ayah putus (mis. sampai KH Yasin yang tidak punya
 // ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
-function fullNasabLabel(p){
+// Mengembalikan HTML: hanya nama-nama orangnya yang diberi warna (${color}),
+// kata sambung "Bin/Binti/Pasangan dari/Anak dari" tetap warna biasa.
+function fullNasabLabelHtml(p, color){
+  color = color || 'var(--ink)';
+  const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
   if(p.fatherId){
     const chain = [];
     let current = p;
@@ -1550,18 +1554,18 @@ function fullNasabLabel(p){
       guard++;
     }
     if(chain.length){
-      return (p.gender==='P' ? 'Binti ' : 'Bin ') + chain.join(' bin ');
+      return (p.gender==='P' ? 'Binti ' : 'Bin ') + chain.map(nameSpan).join(' bin ');
     }
   }
   // Tidak punya garis ayah sendiri -> kemungkinan besar pasangan yang menikah
   // masuk ke keluarga ini, jadi ditandai sebagai pasangan siapa.
   if(p.spouseIds && p.spouseIds.length){
     const spouseNames = p.spouseIds.map(sid=>persons[sid]).filter(Boolean).map(s=>s.name);
-    if(spouseNames.length) return 'Pasangan dari '+spouseNames.join(' & ');
+    if(spouseNames.length) return 'Pasangan dari '+spouseNames.map(nameSpan).join(' &amp; ');
   }
   if(p.motherId){
     const mother = persons[p.motherId];
-    if(mother) return 'Anak dari '+mother.name;
+    if(mother) return 'Anak dari '+nameSpan(mother.name);
   }
   return null;
 }
@@ -1604,19 +1608,21 @@ function generationDescLabel(gen){
   return 'Keturunan ke-'+(gen-1)+' dari KH Yasin (Generasi '+gen+')';
 }
 
+// Baris info di bawah nama: teksnya tetap abu-abu biasa, hanya nama-nama
+// orang di dalamnya (nasab, pasangan, nama cabang) yang diberi warna ${color}.
 function lineageInfoHtml(p, color){
+  color = color || 'var(--ink)';
   const parts = [];
-  const nasab = fullNasabLabel(p);
-  if(nasab) parts.push(escapeHtml(nasab));
+  const nasabHtml = fullNasabLabelHtml(p, color);
+  if(nasabHtml) parts.push(nasabHtml);
   const gen = computeGeneration(p.id);
   parts.push(generationDescLabel(gen));
   const branchRoot = resolveBranchRoot(p.id);
   if(branchRoot && branchRoot.id!==p.id && gen>2){
-    parts.push('Cabang '+escapeHtml(branchRoot.name));
+    parts.push('Cabang <span style="color:'+color+';font-weight:600;">'+escapeHtml(branchRoot.name)+'</span>');
   }
   if(!parts.length) return '';
-  const c = color || 'var(--ink-soft)';
-  return `<div style="font-size:11.5px;color:${c};opacity:.85;margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
+  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">${parts.join(' · ')}</div>`;
 }
 
 // Palet warna hangat yang senada dengan tema navy-gold aplikasi ini, satu
