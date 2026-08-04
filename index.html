@@ -909,7 +909,13 @@ function allPersonsList(){
 /* ---------------- Rendering ---------------- */
 function navigate(id){
   if(!persons[id]) return;
-  if(state.focusId && state.focusId!==id) historyStack.push(state.focusId);
+  if(state.focusId && state.focusId!==id){
+    historyStack.push(state.focusId);
+    // Dorong entri history browser juga, supaya tombol kembali fisik HP
+    // dan tombol kembali browser bisa "mundur" satu langkah di pohon
+    // keluarga, persis seperti tombol Kembali di dalam halaman ini.
+    history.pushState({ftNav:true}, '');
+  }
   state.focusId = id;
   state.activeSpouseId = (persons[id].spouseIds||[])[0] || null;
   childSelectMode = false; selectedChildIds.clear();
@@ -940,11 +946,10 @@ function render(){
     back.className = 'back-btn';
     back.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><span>Kembali</span>';
     back.onclick = ()=>{
-      state.focusId = historyStack.pop();
-      state.activeSpouseId = (persons[state.focusId].spouseIds||[])[0]||null;
-      const searchBox = document.getElementById('searchInput');
-      if(searchBox) searchBox.value = '';
-      render();
+      // Konsumsi entri history browser yang didorong navigate(), supaya
+      // tombol kembali di halaman ini, tombol kembali browser, dan tombol
+      // kembali fisik HP semuanya tetap sinkron satu sama lain.
+      history.back();
     };
     bc.appendChild(back);
   }
@@ -1505,10 +1510,31 @@ new MutationObserver(mutations=>{
   });
 }).observe(document.body, {childList:true});
 
+// Mundur satu langkah di pohon keluarga — logika yang sama dipakai baik
+// oleh tombol "Kembali" di halaman (via history.back()) maupun oleh
+// tombol kembali fisik HP / tombol kembali browser (via event popstate).
+function goBackInTree(){
+  if(!historyStack.length) return;
+  state.focusId = historyStack.pop();
+  state.activeSpouseId = (persons[state.focusId].spouseIds||[])[0]||null;
+  const searchBox = document.getElementById('searchInput');
+  if(searchBox) searchBox.value = '';
+  render();
+}
+
 window.addEventListener('popstate', ()=>{
   const ov = document.getElementById('modalOverlay');
-  if(ov){ ov.remove(); }
-  modalHistoryPushed = false;
+  if(ov){
+    // Modal sedang terbuka: entri history yang baru saja "dimundurkan"
+    // adalah entri milik modal, jadi cukup tutup modalnya.
+    ov.remove();
+    modalHistoryPushed = false;
+    return;
+  }
+  // Tidak ada modal terbuka: entri history yang dimundurkan berarti milik
+  // navigasi pohon keluarga (didorong oleh navigate()), jadi mundur satu
+  // langkah di pohon, sama seperti klik tombol "Kembali".
+  goBackInTree();
 });
 
 function closeModal(){
