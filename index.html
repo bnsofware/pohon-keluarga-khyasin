@@ -1915,6 +1915,61 @@ function branchDetailCardsHtml(root){
   }).join('');
 }
 
+// Semua "unit keluarga" (pasangan ayah+ibu, atau orang tua tunggal) yang
+// tercatat punya anak di data — dipakai untuk dropdown pencarian kepala
+// keluarga di dashboard, supaya bisa cek kelengkapan anak-anak SIAPA SAJA,
+// tidak cuma dari 6 cabang utama.
+function findAllFamilyUnits(){
+  const map = {};
+  Object.values(persons).forEach(c=>{
+    if(!c.fatherId && !c.motherId) return;
+    const key = (c.fatherId||'-') + '|' + (c.motherId||'-');
+    if(!map[key]) map[key] = { fatherId: c.fatherId||null, motherId: c.motherId||null };
+  });
+  return Object.values(map).map(u=>{
+    const father = u.fatherId ? persons[u.fatherId] : null;
+    const mother = u.motherId ? persons[u.motherId] : null;
+    if(!father && !mother) return null;
+    const label = [father, mother].filter(Boolean).map(x=>x.name).join(' & ');
+    const gen = Math.max(father?computeGeneration(father.id):0, mother?computeGeneration(mother.id):0);
+    return { fatherId:u.fatherId, motherId:u.motherId, label, gen };
+  }).filter(Boolean).sort((a,b)=> a.gen-b.gen || a.label.localeCompare(b.label));
+}
+
+function familyChildren(fatherId, motherId){
+  return Object.values(persons).filter(c=>
+    (c.fatherId||null)===(fatherId||null) && (c.motherId||null)===(motherId||null)
+  ).sort(childComparator);
+}
+
+function familyStatsCardHtml(unit){
+  const kids = familyChildren(unit.fatherId, unit.motherId);
+  if(!kids.length) return `<p class="hint">Belum ada anak yang tercatat untuk keluarga ini.</p>`;
+  const stats = branchStats(kids);
+  const color = barColor(stats.overallPct);
+  return `
+    <div class="branch-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:var(--ink);">${escapeHtml(unit.label)}</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);">${stats.total} anak tercatat</div>
+        </div>
+        <div style="text-align:center;flex:none;">
+          <div style="font-size:20px;font-weight:800;color:${color};">${stats.overallPct}%</div>
+          <div style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Skor</div>
+        </div>
+      </div>
+      ${metricBarHtml('Foto tersedia', stats.fotoPct)}
+      ${metricBarHtml('Tanggal lahir lengkap', stats.tglPct)}
+      ${metricBarHtml('Tempat lahir terisi', stats.tempatPct)}
+      ${stats.wafatCount ? metricBarHtml('Info wafat lengkap ('+stats.wafatCount+' orang wafat)', stats.wafatPct) : '<div class="hint">Belum ada anak yang tercatat wafat.</div>'}
+      <div style="margin-top:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px;">Daftar anak (klik untuk buka & lengkapi)</div>
+        ${memberListHtml(kids)}
+      </div>
+    </div>`;
+}
+
 function openCompletenessDashboard(){
   const branches = findGen2Branches();
   if(!branches.length){
@@ -1923,7 +1978,8 @@ function openCompletenessDashboard(){
   }
 
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
-  const tabBtnsHtml = ['<button class="tabbtn active" data-tab="semua">Semua Cabang</button>']
+  const tabBtnsHtml = ['<button class="tabbtn active" data-tab="semua">Semua Cabang</button>',
+      '<button class="tabbtn" data-tab="keluarga">🔍 Cari Keluarga</button>']
     .concat(branches.map(b=>`<button class="tabbtn" data-tab="${b.id}">${escapeHtml(b.name)}</button>`))
     .join('');
 
@@ -1952,6 +2008,19 @@ function openCompletenessDashboard(){
     if(tabId==='semua'){
       desc = `Ringkasan ${branches.length} cabang (anak Gen 2 dari KH Yasin), dihitung dari seluruh anak-cucu &amp; pasangan di masing-masing cabang. Klik satu cabang untuk membuka datanya, atau klik tab nama cabang di atas untuk lihat rincian per generasi.`;
       html = overviewCardsHtml(branches);
+    } else if(tabId==='keluarga'){
+      desc = `Cari kepala keluarga (pasangan ayah &amp; ibu) mana pun di seluruh pohon keluarga, tidak terbatas pada 6 cabang utama, untuk melihat kelengkapan data anak-anaknya.`;
+      const units = findAllFamilyUnits();
+      const optionsHtml = units.map((u,i)=>`<option value="${i}">${escapeHtml(u.label)} (Gen ${u.gen})</option>`).join('');
+      html = `
+        <div class="field">
+          <label>Pilih Kepala Keluarga</label>
+          <select id="dashFamilySelect">
+            <option value="">— pilih pasangan orang tua —</option>
+            ${optionsHtml}
+          </select>
+        </div>
+        <div id="dashFamilyResult" style="margin-top:12px;"></div>`;
     } else {
       const root = persons[tabId];
       desc = `Rincian kelengkapan data cabang <strong>${escapeHtml(root.name)}</strong>, per generasi (Gen ${computeGeneration(root.id)} = dirinya sendiri, generasi berikutnya = anak, cucu, dst).`;
@@ -1960,6 +2029,18 @@ function openCompletenessDashboard(){
     document.getElementById('dashDesc').innerHTML = desc;
     body.innerHTML = html +
       `<p class="hint">Skor dihitung dari 3 hal: foto, tanggal lahir lengkap (bukan cuma tahun), dan tempat lahir. Info wafat ditampilkan terpisah karena hanya berlaku untuk anggota yang sudah wafat.</p>`;
+    if(tabId==='keluarga'){
+      const units = findAllFamilyUnits();
+      document.getElementById('dashFamilySelect').onchange = (e)=>{
+        const idx = e.target.value;
+        const resultEl = document.getElementById('dashFamilyResult');
+        if(idx===''){ resultEl.innerHTML=''; return; }
+        resultEl.innerHTML = familyStatsCardHtml(units[parseInt(idx,10)]);
+        resultEl.querySelectorAll('.member-row').forEach(el=>{
+          el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+        });
+      };
+    }
     body.querySelectorAll('.branch-card[data-id]').forEach(el=>{
       el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
     });
