@@ -1539,91 +1539,59 @@ function birthdayPeopleToday(){
 // ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
 // Mengembalikan HTML: hanya nama-nama orangnya yang diberi warna (${color}),
 // kata sambung "Bin/Binti/Pasangan dari/Anak dari" tetap warna biasa.
-// Rantai nasab ke atas melalui jalur ayah/ibu (prioritas ayah, fallback ibu
-// kalau ayahnya tidak tercatat), dipakai untuk menyusun jalur ke KH Yasin.
-function buildAncestorChain(person){
+//
+// Aturan penelusuran per tingkat, DIMULAI dari orang itu sendiri:
+// 1) Kalau ayahnya tercatat -> ikuti AYAH (selalu ayah asli, bukan disubstitusi
+//    ibu walau si ayah sendiri ternyata mentok/menikah masuk).
+// 2) Kalau ayah TIDAK tercatat tapi ibunya ada -> "anak dari [ibu]".
+// 3) Kalau orang itu sama sekali tidak punya ayah/ibu tercatat (biasanya
+//    karena dia menikah masuk ke keluarga ini) tapi punya pasangan -> pindah
+//    jalur lewat "pasangan dari [pasangan]", lalu lanjutkan penelusuran dari
+//    pasangan itu. Begini caranya seorang suami/istri yang menikah masuk
+//    (mis. KH. Hamim) tetap bisa nyambung ke KH Yasin lewat istrinya
+//    (Hj. Maemunah) tanpa harus "melompati" dia begitu saja di rantai nasab.
+// Diulang tingkat demi tingkat sampai ketemu KH Yasin (Gen 1) atau mentok.
+function buildNasabChain(startPerson){
+  const visited = new Set([startPerson.id]);
   const chain = [];
-  let current = person;
+  let current = startPerson;
   let guard = 0;
-  while(guard<30){
-    let next = null;
-    if(current.fatherId && persons[current.fatherId]) next = persons[current.fatherId];
-    else if(current.motherId && persons[current.motherId]) next = persons[current.motherId];
-    if(!next) break;
-    chain.push(next);
-    current = next;
+  while(guard < 30){
     guard++;
+    let next = null, hopType = null;
+    if(current.fatherId && persons[current.fatherId] && !visited.has(current.fatherId)){
+      next = persons[current.fatherId]; hopType = 'father';
+    } else if(!current.fatherId && current.motherId && persons[current.motherId] && !visited.has(current.motherId)){
+      next = persons[current.motherId]; hopType = 'mother-only';
+    } else if(!current.fatherId && !current.motherId && current.spouseIds && current.spouseIds.length){
+      const sid = current.spouseIds.find(id=>persons[id] && !visited.has(id));
+      if(sid){ next = persons[sid]; hopType = 'spouse'; }
+    }
+    if(!next) break;
+    chain.push({person: next, hopType});
+    visited.add(next.id);
+    current = next;
+    if(computeGeneration(current.id) === 1) break;
   }
   return chain;
-}
-
-// Menelusuri jalur ke KH Yasin (Gen 1): prioritas lewat ayah, kalau ayahnya
-// tidak tercatat baru dicoba lewat ibu — supaya keturunan yang garis ke
-// KH Yasin-nya lewat pihak PEREMPUAN (ibu/nenek) tetap ketemu jalurnya,
-// bukan cuma yang lewat pihak laki-laki.
-function findPathToGen1(person, visited){
-  visited = visited || new Set();
-  if(!person || visited.has(person.id)) return null;
-  visited.add(person.id);
-
-  const gen = computeGeneration(person.id);
-  if(gen === 1) return { path: [person], via: 'self' };
-
-  if(person.fatherId && persons[person.fatherId]){
-    const result = findPathToGen1(persons[person.fatherId], visited);
-    if(result){ result.path.unshift(person); result.via = 'father'; return result; }
-  }
-  if(person.motherId && persons[person.motherId]){
-    const result = findPathToGen1(persons[person.motherId], visited);
-    if(result){ result.path.unshift(person); result.via = 'mother'; return result; }
-  }
-  return null;
 }
 
 function fullNasabLabelHtml(p, color){
   color = color || 'var(--ink)';
   const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
+  const chain = buildNasabChain(p);
+  if(!chain.length) return null;
 
-  const result = findPathToGen1(p);
-
-  // KASUS 1: orang ini punya jalur sampai ke KH Yasin (anak/cucu/dst).
-  if(result && result.path.length > 1){
-    const path = result.path;
-    const via = result.via;
-    const names = path.slice(1).map(a => nameSpan(a.name));
-    if(via === 'father'){
-      const prefix = p.gender === 'P' ? 'Binti ' : 'Bin ';
-      return prefix + names.join(' bin ');
-    } else if(via === 'mother'){
-      return 'Anak dari ' + names.join(' binti ');
-    }
-    return null; // dia sendiri Gen 1 (KH Yasin)
-  }
-
-  // KASUS 2: tidak punya jalur sendiri -> kemungkinan besar pasangan yang
-  // menikah masuk. Tampilkan pasangannya BESERTA jalur nasab pasangan itu.
-  if(p.spouseIds && p.spouseIds.length){
-    const parts = p.spouseIds.map(sid=>{
-      const spouse = persons[sid];
-      if(!spouse) return null;
-      const spouseResult = findPathToGen1(spouse);
-      if(spouseResult && spouseResult.path.length > 1){
-        const path = spouseResult.path;
-        const via = spouseResult.via;
-        const names = path.slice(1).map(a => nameSpan(a.name));
-        if(via === 'father'){
-          const prefix = spouse.gender === 'P' ? 'binti ' : 'bin ';
-          return nameSpan(spouse.name) + ' ' + prefix + names.join(' bin ');
-        } else if(via === 'mother'){
-          return nameSpan(spouse.name) + ' anak dari ' + names.join(' binti ');
-        }
-        return nameSpan(spouse.name);
-      }
-      return nameSpan(spouse.name);
-    }).filter(Boolean);
-    if(parts.length) return 'Pasangan dari ' + parts.join(' &amp; ');
-  }
-  return null;
+  const parts = chain.map((hop, i)=>{
+    const fromPerson = i===0 ? p : chain[i-1].person;
+    let connector;
+    if(hop.hopType==='father') connector = (fromPerson.gender==='P' ? 'Binti' : 'Bin');
+    else if(hop.hopType==='mother-only') connector = 'Anak dari';
+    else connector = 'Pasangan dari';
+    if(i>0) connector = connector.toLowerCase();
+    return connector + ' ' + nameSpan(hop.person.name);
+  });
+  return parts.join(' ');
 }
 
 // Menelusuri ke atas (lewat jalur ayah dulu, baru ibu) untuk menemukan
