@@ -907,14 +907,23 @@ function allPersonsList(){
 }
 
 /* ---------------- Rendering ---------------- */
-function navigate(id){
+function navigate(id, opts={}){
   if(!persons[id]) return;
   if(state.focusId && state.focusId!==id){
     historyStack.push(state.focusId);
     // Dorong entri history browser juga, supaya tombol kembali fisik HP
     // dan tombol kembali browser bisa "mundur" satu langkah di pohon
     // keluarga, persis seperti tombol Kembali di dalam halaman ini.
-    history.pushState({ftNav:true}, '');
+    // Kalau navigasi ini dipicu dari dalam modal (mis. klik nama di popup
+    // Ulang Tahun), GANTI entri history milik modal itu (replaceState)
+    // alih-alih menumpuk pushState baru di atas history.back() yang juga
+    // sedang berjalan — dua-duanya sama-sama async dan bisa saling
+    // bertabrakan kalau dijalankan terpisah.
+    if(opts.replaceModalHistory){
+      history.replaceState({ftNav:true}, '');
+    } else {
+      history.pushState({ftNav:true}, '');
+    }
   }
   state.focusId = id;
   state.activeSpouseId = (persons[id].spouseIds||[])[0] || null;
@@ -1546,6 +1555,20 @@ function closeModal(){
   }
 }
 
+// Dipakai untuk item yang bisa diklik DI DALAM modal (mis. nama orang di
+// popup "Ulang Tahun Hari Ini" atau di dashboard kelengkapan data) supaya
+// langsung membuka halaman orang tersebut. Menutup modal dan berpindah
+// halaman digabung jadi satu operasi history yang sinkron (lihat
+// parameter replaceModalHistory di navigate()), supaya tombol kembali
+// fisik HP / browser tetap konsisten setelahnya.
+function closeModalAndNavigate(id){
+  const ov = document.getElementById('modalOverlay');
+  if(ov) ov.remove();
+  const hadModalHistory = modalHistoryPushed;
+  modalHistoryPushed = false;
+  navigate(id, { replaceModalHistory: hadModalHistory });
+}
+
 /* ---------------- Ulang Tahun Hari Ini ---------------- */
 // Hanya orang yang tanggal lahirnya lengkap (YYYY-MM-DD) yang bisa dicek,
 // karena data lama yang cuma berisi tahun (mis. "1937") tidak diketahui
@@ -1728,7 +1751,7 @@ function openBirthdayModal(){
   overlay.querySelectorAll('.birthday-item').forEach(el=>{
     el.onmouseenter = ()=>{ el.style.background='var(--paper-dark)'; };
     el.onmouseleave = ()=>{ el.style.background='transparent'; };
-    el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+    el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-id')); };
   });
 }
 function formatTodayLong(d){
@@ -2063,15 +2086,15 @@ function openCompletenessDashboard(){
         if(idx===''){ resultEl.innerHTML=''; return; }
         resultEl.innerHTML = familyStatsCardHtml(units[parseInt(idx,10)]);
         resultEl.querySelectorAll('.member-row').forEach(el=>{
-          el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+          el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-id')); };
         });
       };
     }
     body.querySelectorAll('.branch-card[data-id]').forEach(el=>{
-      el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+      el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-id')); };
     });
     body.querySelectorAll('.member-row').forEach(el=>{
-      el.onclick = ()=>{ closeModal(); navigate(el.getAttribute('data-id')); };
+      el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-id')); };
     });
   }
 
