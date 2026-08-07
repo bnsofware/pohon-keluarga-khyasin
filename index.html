@@ -905,6 +905,20 @@ async function reorderChild(kids, index, direction){
 function allPersonsList(){
   return Object.values(persons).sort((a,b)=>a.name.localeCompare(b.name));
 }
+// Mengecek apakah `ancestorId` adalah leluhur (ayah/ibu, kakek/nenek, dst) dari
+// `personId` dengan menelusuri ke atas. Dipakai saat menyunting Ayah/Ibu
+// seseorang, supaya tidak bisa memilih keturunannya sendiri sebagai orang tua
+// (yang akan membuat rantai nasab jadi lingkaran/muter tanpa akhir).
+function isAncestorOf(ancestorId, personId, visited){
+  visited = visited || new Set();
+  if(!personId || visited.has(personId)) return false;
+  visited.add(personId);
+  const p = persons[personId];
+  if(!p) return false;
+  if(p.fatherId===ancestorId || p.motherId===ancestorId) return true;
+  return (p.fatherId && isAncestorOf(ancestorId, p.fatherId, visited))
+      || (p.motherId && isAncestorOf(ancestorId, p.motherId, visited));
+}
 
 /* ---------------- Rendering ---------------- */
 function navigate(id, opts={}){
@@ -2316,6 +2330,9 @@ M. Shonhaji, L"></textarea>
 function openEditModal(personId){
   const p = persons[personId];
   const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
+  const dlOptions = allPersonsList().filter(x=>x.id!==p.id).map(x=>`<option value="${escapeHtml(personSearchLabel(x))}" data-id="${x.id}"></option>`).join('');
+  const currentFatherLabel = p.fatherId && persons[p.fatherId] ? personSearchLabel(persons[p.fatherId]) : '';
+  const currentMotherLabel = p.motherId && persons[p.motherId] ? personSearchLabel(persons[p.motherId]) : '';
   overlay.innerHTML = `
     <div class="modal">
       <div class="modal-head"><h3>Sunting Data</h3><p>Perbarui informasi ${escapeHtml(p.name)}.</p></div>
@@ -2333,6 +2350,12 @@ function openEditModal(personId){
             <input type="text" id="eBirthPlace" placeholder="cth: Rangkasbitung" value="${escapeHtml(p.birthPlace||'')}">
           </div>
         </div>
+        <datalist id="ePersonPickList">${dlOptions}</datalist>
+        <div class="field-row">
+          <div class="field"><label>Ayah (opsional)</label><input type="text" id="eFather" list="ePersonPickList" placeholder="Ketik untuk mencari nama..." autocomplete="off" value="${escapeHtml(currentFatherLabel)}"></div>
+          <div class="field"><label>Ibu (opsional)</label><input type="text" id="eMother" list="ePersonPickList" placeholder="Ketik untuk mencari nama..." autocomplete="off" value="${escapeHtml(currentMotherLabel)}"></div>
+        </div>
+        <div class="hint" style="margin-top:-6px;">Kosongkan kalau memang tidak tercatat (mis. pasangan yang menikah masuk). Ketik nama untuk mencari, lalu pilih dari saran yang muncul — kalau ada nama kembar, tiap pilihan menampilkan generasinya (Gen X) supaya tidak salah pilih.</div>
         <div class="field"><label>Tanggal / Tahun Lahir</label>
           <input type="text" id="eBirth" placeholder="cth: 1937 atau 1937-05-12" inputmode="numeric" value="${escapeHtml(p.birthYear||'')}">
           <div class="hint" style="margin-top:3px;">Boleh tahun saja dulu, lengkapi tanggal-bulannya nanti kapan saja.</div>
@@ -2410,6 +2433,19 @@ function openEditModal(personId){
     }
     const newBirthPlace = document.getElementById('eBirthPlace').value.trim();
     const newBurialPlace = document.getElementById('eBurialPlace').value.trim();
+    const fRaw = document.getElementById('eFather').value;
+    const mRaw = document.getElementById('eMother').value;
+    const fId = resolvePersonIdFromLabel(fRaw);
+    const mId = resolvePersonIdFromLabel(mRaw);
+    if(fRaw.trim() && !fId){ showToast('Nama ayah tidak ditemukan di daftar. Pilih dari saran yang muncul.'); return; }
+    if(mRaw.trim() && !mId){ showToast('Nama ibu tidak ditemukan di daftar. Pilih dari saran yang muncul.'); return; }
+    if(fId===p.id || mId===p.id){ showToast('Seseorang tidak bisa jadi orang tuanya sendiri.'); return; }
+    if((fId && isAncestorOf(p.id, fId)) || (mId && isAncestorOf(p.id, mId))){
+      showToast('Tidak bisa: orang yang dipilih adalah keturunan dari '+p.name+' sendiri (akan membuat nasab muter/lingkaran).');
+      return;
+    }
+    p.fatherId = fId || null;
+    p.motherId = mId || null;
     p.name = name;
     p.gender = document.getElementById('eGender').value;
     p.birthYear = newBirth;
