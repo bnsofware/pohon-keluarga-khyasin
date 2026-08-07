@@ -1893,14 +1893,12 @@ function openInfografisModal(id){
         ${childListHtml}
       </div>
       <div class="modal-foot">
-        <button class="btn btn-outline" id="infoEditBtn">Sunting Data</button>
         <button class="btn btn-primary" id="infoCloseBtn">Tutup</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
   document.getElementById('infoCloseBtn').onclick = closeModal;
-  document.getElementById('infoEditBtn').onclick = ()=>{ closeModal(); openEditModal(p.id); };
   overlay.querySelectorAll('.info-mini-row[data-nav]').forEach(el=>{
     el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-nav')); };
   });
