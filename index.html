@@ -358,6 +358,45 @@
     animation:modalPop .18s ease;
   }
   .modal.modal-wide{max-width:800px;}
+
+  /* ---- Popup Infografis per Orang ---- */
+  .info-modal{max-width:430px;overflow:hidden;border-top:none;padding-bottom:0;}
+  .info-hero{
+    position:relative;overflow:hidden;text-align:center;padding:30px 22px 22px;
+    background:linear-gradient(160deg, var(--navy) 0%, var(--navy-dark) 60%, var(--pine-dark) 130%);
+  }
+  .info-hero::before{
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% -10%, rgba(228,199,102,0.35), transparent 55%);
+  }
+  .info-hero::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:4px;
+    background:linear-gradient(90deg, transparent, var(--gold-light), var(--gold), var(--gold-light), transparent);
+  }
+  .info-hero-avatar-wrap{position:relative;display:inline-block;margin-bottom:12px;}
+  .info-hero-avatar-wrap img,.info-hero-avatar-wrap .avatar{
+    border:3px solid var(--gold-light);box-shadow:0 10px 28px rgba(0,0,0,0.45), 0 0 0 6px rgba(228,199,102,0.12);
+  }
+  .info-hero-name{position:relative;font-family:'Fraunces',serif;font-weight:700;font-size:23px;color:#F8F2DD;line-height:1.25;}
+  .info-hero-badges{position:relative;display:flex;gap:6px;justify-content:center;margin-top:9px;flex-wrap:wrap;}
+  .info-badge{padding:2px 11px;border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.03em;}
+  .info-badge-male{background:rgba(220,230,239,0.18);color:#C7DCEC;box-shadow:inset 0 0 0 1px rgba(199,220,236,0.45);}
+  .info-badge-female{background:rgba(241,222,227,0.18);color:#F1C4D3;box-shadow:inset 0 0 0 1px rgba(241,196,211,0.45);}
+  .info-hero-nasab{position:relative;margin-top:11px;font-size:12px;color:#DAD3E9;line-height:1.55;padding-top:10px;border-top:1px solid rgba(255,255,255,0.14);}
+  .info-body{padding:18px 22px 4px;}
+  .info-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:4px;}
+  .info-stat{background:var(--paper);border:1px solid #EAE4D2;border-radius:12px;padding:9px 12px;}
+  .info-stat-full{grid-column:1 / -1;}
+  .info-stat-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;}
+  .info-stat-value{font-size:13px;font-weight:700;color:var(--ink);line-height:1.35;}
+  .info-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--pine-dark);margin:16px 0 7px;display:flex;align-items:center;gap:5px;}
+  .info-mini-list{display:flex;flex-direction:column;gap:5px;}
+  .info-mini-row{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:10px;cursor:pointer;transition:background .15s;}
+  .info-mini-row:hover{background:var(--paper-dark);}
+  .info-mini-name{font-size:12.5px;font-weight:700;color:var(--ink);}
+  .info-mini-sub{font-size:10.5px;color:var(--ink-soft);margin-top:1px;}
+  .btn-view{border:none;background:transparent;color:var(--gold-dark, #8C6A1E);font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px 2px;}
+  .btn-view:hover{color:var(--gold);}
   .branch-card{border:1.5px solid #EAE4D2;border-radius:14px;padding:14px 16px;background:var(--paper);transition:box-shadow .15s;}
   .branch-card:hover{box-shadow:var(--shadow);cursor:pointer;}
   .branch-bar-track{height:8px;border-radius:5px;background:#E4DFCF;overflow:hidden;}
@@ -1057,7 +1096,10 @@ function render(){
         <div class="child-info"><div class="name">${escapeHtml(k.name)}</div><div class="years">${yearsLabel(k)}${yearsLabel(k)?' · ':''}${genBadgeHtml(computeGeneration(k.id))}</div>${burialInfoLine(k) ? `<div class="years" style="margin-top:1px;color:#9C3140;font-weight:700;">${burialInfoLine(k)}</div>` : ''}</div>
       </div>
       ${childSelectMode ? '' : `<div class="child-card-actions">
-        <button class="edit-child-btn" data-action="edit" title="Sunting data ${escapeHtml(k.name)}">Sunting</button>
+        <div style="display:flex;gap:10px;">
+          <button class="edit-child-btn" data-action="view" title="Lihat infografis ${escapeHtml(k.name)}">👁 Lihat</button>
+          <button class="edit-child-btn" data-action="edit" title="Sunting data ${escapeHtml(k.name)}">Sunting</button>
+        </div>
         <div class="child-order-btns">
           <button class="order-btn" data-dir="-1" title="Pindah ke depan"${idx===0?' disabled':''}>▲</button>
           <button class="order-btn" data-dir="1" title="Pindah ke belakang"${idx===kids.length-1?' disabled':''}>▼</button>
@@ -1067,6 +1109,7 @@ function render(){
       c.onclick = ()=>{ toggleChildSelected(k.id); render(); };
     }else{
       c.onclick=()=>navigate(k.id);
+      c.querySelector('[data-action="view"]').onclick = (e)=>{ e.stopPropagation(); openInfografisModal(k.id); };
       c.querySelector('[data-action="edit"]').onclick = (e)=>{ e.stopPropagation(); openEditModal(k.id); };
       c.querySelectorAll('.order-btn[data-dir]').forEach(btn=>{
         btn.onclick = (e)=>{ e.stopPropagation(); reorderChild(kids, idx, parseInt(btn.dataset.dir,10)); };
@@ -1184,6 +1227,10 @@ function personCard(p, isMainFocus, small){
   card.appendChild(head);
 
   const actions = document.createElement('div'); actions.className='card-actions';
+  const viewBtn = document.createElement('button'); viewBtn.className='btn btn-ghost'; viewBtn.textContent='👁 Lihat';
+  viewBtn.title='Lihat infografis '+p.name;
+  viewBtn.onclick=(e)=>{ e.stopPropagation(); openInfografisModal(p.id); };
+  actions.appendChild(viewBtn);
   const editBtn = document.createElement('button'); editBtn.className='btn btn-ghost'; editBtn.textContent='Sunting';
   editBtn.onclick=(e)=>{ e.stopPropagation(); openEditModal(p.id); };
   actions.appendChild(editBtn);
@@ -1772,6 +1819,91 @@ function formatTodayLong(d){
   const days=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   return days[d.getDay()]+', '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+}
+
+/* ---------------- Popup Infografis per Orang ---------------- */
+// Dipicu dari tombol "👁 Lihat" di kartu utama (ayah/ibu/fokus/pasangan) dan
+// di kartu anak. Menyajikan ringkasan visual satu orang dalam satu popup:
+// foto besar, rantai nasab, generasi, tanggal-tanggal penting, serta daftar
+// pasangan & anak yang bisa langsung diklik untuk berpindah fokus. Gaya
+// visualnya (hero navy-gold, badge, dsb) sengaja disamakan dengan tema utama
+// aplikasi supaya terasa menyatu, bukan tempelan terpisah.
+function openInfografisModal(id){
+  const p = persons[id];
+  if(!p) return;
+  const branchColorMap = getBranchColorMap();
+  const gen = computeGeneration(p.id);
+  const nasabHtml = fullNasabLabelHtml(p, '#EAD9A0');
+  const isWafat = !!(p.deathYear && String(p.deathYear).trim());
+
+  const heroAvatar = p.photo
+    ? `<img src="${p.photo}" style="width:98px;height:98px;border-radius:50%;object-fit:cover;object-position:center ${(typeof p.photoPosY==='number')?p.photoPosY:50}%;" alt="">`
+    : `<div class="avatar" style="width:98px;height:98px;font-size:34px;">${initials(p.name)}</div>`;
+
+  const stats = [];
+  stats.push({label:'Lahir', value: p.birthYear ? formatDateDisplay(p.birthYear) : 'Belum tercatat'});
+  if(p.birthPlace) stats.push({label:'Tempat Lahir', value: p.birthPlace});
+  if(isWafat){
+    const age = calcAge(p.birthYear, p.deathYear);
+    stats.push({label:'Wafat', value: formatDateDisplay(p.deathYear) + (age!==null ? (' · usia '+age+' th') : '')});
+    if(p.burialPlace) stats.push({label:'Dikuburkan', value: p.burialPlace});
+  }else if(p.birthYear){
+    const age = calcAge(p.birthYear, null);
+    stats.push({label:'Usia Sekarang', value: age!==null ? (age+' tahun') : 'Tidak diketahui'});
+  }
+  stats.push({label:'Generasi', value: 'Gen '+gen+ (gen<=1 ? ' · Leluhur Awal' : (' · Keturunan ke-'+(gen-1)))});
+
+  const sps = spouses(p);
+  const kids = Object.values(persons).filter(c=>c.fatherId===p.id || c.motherId===p.id);
+  kids.sort(childComparator);
+
+  const miniRow = person => `
+    <div class="info-mini-row" data-nav="${person.id}">
+      ${avatarHtml(person,36)}
+      <div style="min-width:0;">
+        <div class="info-mini-name">${escapeHtml(person.name)}</div>
+        <div class="info-mini-sub">${yearsLabel(person) || 'Belum ada data'}</div>
+      </div>
+    </div>`;
+
+  const spouseListHtml = sps.length ? `<div class="info-mini-list">${sps.map(miniRow).join('')}</div>`
+    : `<p class="hint" style="margin:0;">Belum ada pasangan tercatat.</p>`;
+  const childListHtml = kids.length ? `<div class="info-mini-list">${kids.map(miniRow).join('')}</div>`
+    : `<p class="hint" style="margin:0;">Belum ada anak tercatat.</p>`;
+
+  const overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='modalOverlay';
+  overlay.innerHTML = `
+    <div class="modal info-modal">
+      <div class="info-hero">
+        <div class="info-hero-avatar-wrap">${heroAvatar}</div>
+        <div class="info-hero-name">${escapeHtml(p.name)}</div>
+        <div class="info-hero-badges">
+          <span class="info-badge ${p.gender==='P'?'info-badge-female':'info-badge-male'}">${p.gender==='P'?'Perempuan':'Laki-laki'}</span>
+          ${genBadgeHtml(gen)}
+        </div>
+        ${nasabHtml ? `<div class="info-hero-nasab">${nasabHtml}</div>` : ''}
+      </div>
+      <div class="info-body">
+        <div class="info-stat-grid">
+          ${stats.map(s=>`<div class="info-stat"><div class="info-stat-label">${escapeHtml(s.label)}</div><div class="info-stat-value">${escapeHtml(String(s.value))}</div></div>`).join('')}
+        </div>
+        <div class="info-section-title">💍 Pasangan (${sps.length})</div>
+        ${spouseListHtml}
+        <div class="info-section-title">👶 Anak-Anak (${kids.length})</div>
+        ${childListHtml}
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="infoEditBtn">Sunting Data</button>
+        <button class="btn btn-primary" id="infoCloseBtn">Tutup</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  document.getElementById('infoCloseBtn').onclick = closeModal;
+  document.getElementById('infoEditBtn').onclick = ()=>{ closeModal(); openEditModal(p.id); };
+  overlay.querySelectorAll('.info-mini-row[data-nav]').forEach(el=>{
+    el.onclick = ()=>{ closeModalAndNavigate(el.getAttribute('data-nav')); };
+  });
 }
 
 /* ---------------- Dashboard Kelengkapan Data per Cabang (Gen 2) ---------------- */
