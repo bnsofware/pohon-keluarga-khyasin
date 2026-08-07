@@ -629,23 +629,23 @@ function seedData(){
   P('p11',"Hj. Mu'minah (Hj. Moneng)",'P',{fatherId:'p1',motherId:'p2'});
   P('p12','KH. M Athoillah (Abah Kemen)','L',{fatherId:'p1',motherId:'p2'});
 
-  // children of p3+p4
-  P('p13','Diok Sadiah','P',{fatherId:'p3',motherId:'p4',birthYear:'1935',spouseIds:['p14']});
+  // children of p3+p4 (p4 = KH. Hamim = ayah, p3 = Hj. Maemunah = ibu)
+  P('p13','Diok Sadiah','P',{fatherId:'p4',motherId:'p3',birthYear:'1935',spouseIds:['p14']});
   P('p14','Ilyas','L',{spouseIds:['p13']});
-  P('p15','Abdul Malik (Adung)','L',{fatherId:'p3',motherId:'p4',birthYear:'1937'});
-  P('p16','Ecin Kuraesin','P',{fatherId:'p3',motherId:'p4',birthYear:'1939'});
-  P('p17','Hj. Rumjiah','P',{fatherId:'p3',motherId:'p4',birthYear:'1941',deathYear:'2018'});
-  P('p18','Huyey Ruchdin','L',{fatherId:'p3',motherId:'p4',birthYear:'1943'});
-  P('p19','Syahrir Saputra','L',{fatherId:'p3',motherId:'p4',birthYear:'1944',deathYear:'1999'});
+  P('p15','Abdul Malik (Adung)','L',{fatherId:'p4',motherId:'p3',birthYear:'1937'});
+  P('p16','Ecin Kuraesin','P',{fatherId:'p4',motherId:'p3',birthYear:'1939'});
+  P('p17','Hj. Rumjiah','P',{fatherId:'p4',motherId:'p3',birthYear:'1941',deathYear:'2018'});
+  P('p18','Huyey Ruchdin','L',{fatherId:'p4',motherId:'p3',birthYear:'1943'});
+  P('p19','Syahrir Saputra','L',{fatherId:'p4',motherId:'p3',birthYear:'1944',deathYear:'1999'});
 
-  // children of p13+p14
-  P('p20',"Sa'adah",'P',{fatherId:'p13',motherId:'p14'});
-  P('p21','Juheni','',{fatherId:'p13',motherId:'p14'});
-  P('p22','H. Mahpudin','L',{fatherId:'p13',motherId:'p14'});
-  P('p23','Hudri','L',{fatherId:'p13',motherId:'p14'});
-  P('p24','Mutmainah','P',{fatherId:'p13',motherId:'p14'});
-  P('p25','Memed','L',{fatherId:'p13',motherId:'p14'});
-  P('p26','Een','',{fatherId:'p13',motherId:'p14'});
+  // children of p13+p14 (p14 = Ilyas = ayah, p13 = Diok Sadiah = ibu)
+  P('p20',"Sa'adah",'P',{fatherId:'p14',motherId:'p13'});
+  P('p21','Juheni','',{fatherId:'p14',motherId:'p13'});
+  P('p22','H. Mahpudin','L',{fatherId:'p14',motherId:'p13'});
+  P('p23','Hudri','L',{fatherId:'p14',motherId:'p13'});
+  P('p24','Mutmainah','P',{fatherId:'p14',motherId:'p13'});
+  P('p25','Memed','L',{fatherId:'p14',motherId:'p13'});
+  P('p26','Een','',{fatherId:'p14',motherId:'p13'});
 
   // children of p5+p6
   P('p27','Hj. Mariam','P',{fatherId:'p5',motherId:'p6'});
