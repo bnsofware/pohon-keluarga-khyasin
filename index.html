@@ -1098,7 +1098,7 @@ function render(){
       ${childSelectMode ? '' : `<div class="child-card-actions">
         <div style="display:flex;gap:10px;">
           <button class="edit-child-btn" data-action="view" title="Lihat infografis ${escapeHtml(k.name)}">👁 Lihat</button>
-          <button class="edit-child-btn" data-action="edit" title="Sunting data ${escapeHtml(k.name)}">Sunting</button>
+          <button class="edit-child-btn" data-action="edit" title="Edit data ${escapeHtml(k.name)}">Edit</button>
         </div>
         <div class="child-order-btns">
           <button class="order-btn" data-dir="-1" title="Pindah ke depan"${idx===0?' disabled':''}>▲</button>
@@ -1231,7 +1231,7 @@ function personCard(p, isMainFocus, small){
   viewBtn.title='Lihat infografis '+p.name;
   viewBtn.onclick=(e)=>{ e.stopPropagation(); openInfografisModal(p.id); };
   actions.appendChild(viewBtn);
-  const editBtn = document.createElement('button'); editBtn.className='btn btn-ghost'; editBtn.textContent='Sunting';
+  const editBtn = document.createElement('button'); editBtn.className='btn btn-ghost'; editBtn.textContent='Edit';
   editBtn.onclick=(e)=>{ e.stopPropagation(); openEditModal(p.id); };
   actions.appendChild(editBtn);
   if(isMainFocus){
@@ -2465,7 +2465,7 @@ function openEditModal(personId){
   const currentMotherLabel = p.motherId && persons[p.motherId] ? personSearchLabel(persons[p.motherId]) : '';
   overlay.innerHTML = `
     <div class="modal">
-      <div class="modal-head"><h3>Sunting Data</h3><p>Perbarui informasi ${escapeHtml(p.name)}.</p></div>
+      <div class="modal-head"><h3>Edit Data</h3><p>Perbarui informasi ${escapeHtml(p.name)}.</p></div>
       <div class="modal-body">
         <div class="field"><label>Nama Lengkap</label><input type="text" id="eName" value="${escapeHtml(p.name)}"></div>
         <div class="field-row">
