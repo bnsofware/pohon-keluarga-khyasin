@@ -992,7 +992,13 @@ function render(){
   bc.innerHTML = '';
 
   if(!state.focusId || !persons[state.focusId]){
-    const first = Object.values(persons).find(p=>!p.fatherId && !p.motherId) || Object.values(persons)[0];
+    // Cari leluhur akar (tidak punya ayah/ibu). Bisa lebih dari satu kandidat
+    // (mis. KH Yasin & istrinya Marsah, sama-sama generasi awal tanpa orang
+    // tua tercatat) — utamakan yang laki-laki sebagai patriarkh/leluhur
+    // utama silsilah (Bani Yasin), supaya default halaman selalu ke KH Yasin,
+    // bukan tergantung urutan baris di Google Sheet.
+    const roots = Object.values(persons).filter(p=>!p.fatherId && !p.motherId);
+    const first = roots.find(p=>p.gender==='L') || roots[0] || Object.values(persons)[0];
     if(first){ state.focusId = first.id; state.activeSpouseId = (first.spouseIds||[])[0] || null; }
   }
   const focus = getPerson(state.focusId);
