@@ -1713,24 +1713,34 @@ function reachesFounderViaBlood(personId, visited){
       || (p.motherId && reachesFounderViaBlood(p.motherId, visited));
 }
 
-// Rantai nasab penuh ke atas lewat jalur ayah: "Bin/Binti Fulan bin Fulan bin ...".
-// Berhenti begitu garis ayah putus (mis. sampai KH Yasin yang tidak punya
+// Rantai nasab penuh ke atas: "Bin/Binti Fulan bin Fulan bin ...".
+// Berhenti begitu garis darah putus (mis. sampai KH Yasin yang tidak punya
 // ayah tercatat, atau ada leluhur yang datanya memang belum lengkap).
 // Mengembalikan HTML: hanya nama-nama orangnya yang diberi warna (${color}),
 // kata sambung "Bin/Binti/Anak dari" tetap warna biasa.
 //
 // Aturan penelusuran per tingkat, DIMULAI dari orang itu sendiri:
-// 1) Kalau ayahnya tercatat -> ikuti AYAH (selalu ayah asli, bukan disubstitusi
-//    ibu walau si ayah sendiri ternyata mentok/menikah masuk).
-// 2) Kalau ayah TIDAK tercatat tapi ibunya ada -> "anak dari [ibu]".
-// 3) Kalau orang itu sama sekali tidak punya ayah/ibu tercatat (biasanya
-//    karena dia menikah masuk ke keluarga ini), coba lanjut lewat pasangan —
-//    TAPI hanya kalau pasangan itu sendiri memang ada hubungan darah ke
-//    leluhur awal (lihat reachesFounderViaBlood). Kalau pasangannya juga
-//    tidak ada hubungan darah, rantai berhenti di situ saja tanpa
-//    menampilkan pasangan itu sama sekali — supaya kalimat nasab yang
-//    tampil selalu murni jalur darah yang benar-benar nyambung ke KH Yasin,
-//    tanpa embel-embel "pasangan dari" yang membingungkan.
+// 1) Kalau AYAH tercatat DAN ayah itu sendiri punya jalur darah yang
+//    nyambung ke leluhur awal (reachesFounderViaBlood) -> ikuti AYAH.
+// 2) Kalau tidak (ayah tidak tercatat, ATAU ayah tercatat tapi ternyata
+//    tidak ada hubungan darah ke leluhur awal — mis. menikah masuk tanpa
+//    orang tua tercatat) TAPI IBU tercatat dan ibu itu punya jalur darah
+//    yang nyambung -> lompat LANGSUNG ke ibu ("anak dari [ibu]"), ayah yang
+//    tidak berdarah itu SAMA SEKALI TIDAK disebut/dilewati begitu saja di
+//    kalimat nasab.
+// 3) Kalau tidak satu pun (ayah/ibu) yang diketahui nyambung ke leluhur
+//    awal — misalnya memang cabang keluarga lain yang berdiri sendiri —
+//    tetap pakai ayah (kalau tercatat) atau ibu (kalau hanya ibu yang
+//    tercatat) apa adanya, sesuai konvensi nasab standar; tidak ada
+//    salahnya menampilkan garis itu meski akhirnya tidak sampai KH Yasin.
+// 4) Kalau orang itu sama sekali tidak punya ayah/ibu tercatat (biasanya
+//    karena dia menikah masuk ke keluarga ini) -> RANTAI DARAH BERHENTI
+//    DI SITU, titik. TIDAK dilanjutkan lewat pasangannya, sebab pasangan
+//    bukan hubungan darah — melanjutkan lewat pasangan akan salah secara
+//    fakta (mis. "anak dari [istrinya]" padahal istrinya bukan ibunya).
+//    Info soal pasangannya (kalau memang keturunan KH Yasin) ditambahkan
+//    TERPISAH oleh fullNasabLabelHtml sebagai catatan pelengkap redup di
+//    akhir, bukan disambung jadi bagian dari kalimat "anak dari" di atas.
 // Diulang tingkat demi tingkat sampai ketemu KH Yasin (Gen 1) atau mentok.
 function buildNasabChain(startPerson){
   const visited = new Set([startPerson.id]);
@@ -1740,16 +1750,28 @@ function buildNasabChain(startPerson){
   while(guard < 30){
     guard++;
     let next = null, hopType = null;
-    if(current.fatherId && persons[current.fatherId] && !visited.has(current.fatherId)){
+
+    const fatherOk = current.fatherId && persons[current.fatherId] && !visited.has(current.fatherId);
+    const motherOk = current.motherId && persons[current.motherId] && !visited.has(current.motherId);
+    const fatherBlood = fatherOk && reachesFounderViaBlood(current.fatherId, new Set());
+    const motherBlood = motherOk && reachesFounderViaBlood(current.motherId, new Set());
+
+    if(fatherBlood){
       next = persons[current.fatherId]; hopType = 'father';
-    } else if(!current.fatherId && current.motherId && persons[current.motherId] && !visited.has(current.motherId)){
+    } else if(motherBlood){
+      // Ayah (kalau tercatat) tidak punya hubungan darah ke leluhur awal —
+      // langsung lewat ibu, ayah tidak disebut sama sekali di kalimat nasab.
       next = persons[current.motherId]; hopType = 'mother-only';
-    } else if(!current.fatherId && !current.motherId && current.spouseIds && current.spouseIds.length){
-      const sid = current.spouseIds.find(id=>
-        persons[id] && !visited.has(id) && reachesFounderViaBlood(id, new Set())
-      );
-      if(sid){ next = persons[sid]; hopType = 'mother-only'; }
+    } else if(fatherOk){
+      // Tidak satu pun orang tua yang diketahui nyambung ke leluhur awal
+      // (kemungkinan cabang keluarga lain) — pakai ayah apa adanya.
+      next = persons[current.fatherId]; hopType = 'father';
+    } else if(motherOk){
+      next = persons[current.motherId]; hopType = 'mother-only';
     }
+    // Sengaja TIDAK ADA cabang "else if spouseIds..." di sini lagi — lihat
+    // poin 4 di komentar atas.
+
     if(!next) break;
     chain.push({person: next, hopType});
     visited.add(next.id);
@@ -1763,14 +1785,11 @@ function fullNasabLabelHtml(p, color){
   color = color || 'var(--ink)';
   const nameSpan = n => `<span style="color:${color};font-weight:600;">${escapeHtml(n)}</span>`;
   const chain = buildNasabChain(p);
-  if(!chain.length) return null;
 
   // buildNasabChain di atas sudah memastikan setiap hop di sini murni jalur
-  // DARAH (ayah, atau ibu/pasangan-berdarah yang sama-sama nyambung ke
-  // leluhur awal) — pasangan yang tidak ada hubungan darah sudah difilter
-  // di sana dan tidak pernah masuk ke sini. Jadi tinggal dirangkai polos
-  // sebagai satu kalimat Bin/Binti/Anak dari, tanpa perlu embel-embel
-  // "pasangan"/"pernikahan" apa pun.
+  // DARAH (ayah, atau ibu yang sama-sama nyambung ke leluhur awal) — jadi
+  // tinggal dirangkai polos sebagai satu kalimat Bin/Binti/Anak dari, tanpa
+  // embel-embel "pasangan"/"pernikahan" apa pun di kalimat utama ini.
   const parts = chain.map((hop, i)=>{
     const fromPerson = i===0 ? p : chain[i-1].person;
     let connector;
@@ -1779,7 +1798,28 @@ function fullNasabLabelHtml(p, color){
     if(i>0) connector = connector.toLowerCase();
     return connector + ' ' + nameSpan(hop.person.name);
   });
-  return parts.join(' ');
+  const mainHtml = parts.length ? parts.join(' ') : null;
+
+  // Kalau rantai darah di atas mentok di seseorang yang sama sekali tidak
+  // punya ayah/ibu tercatat (biasanya karena dia menikah masuk ke keluarga
+  // ini, mis. KH. Hamim), TIDAK BOLEH pura-pura dia sendiri darah KH Yasin.
+  // Kalau pasangannya sendiri memang keturunan KH Yasin (mis. Hj. Maemunah),
+  // tambahkan catatan PELENGKAP terpisah — lebih kecil & redup, di LUAR
+  // kalimat "anak dari" di atas — supaya jelas ini info pernikahan, bukan
+  // garis darah. Kalau pasangannya juga tidak ada hubungan darah, tidak
+  // ditampilkan sama sekali (tidak ada yang perlu dijelaskan).
+  const terminal = chain.length ? chain[chain.length-1].person : p;
+  let noteHtml = null;
+  if(!terminal.fatherId && !terminal.motherId && terminal.spouseIds && terminal.spouseIds.length){
+    const spouseId = terminal.spouseIds.find(id => persons[id] && reachesFounderViaBlood(id, new Set()));
+    if(spouseId){
+      noteHtml = 'pasangan dari ' + nameSpan(persons[spouseId].name) + ', keturunan KH Yasin';
+    }
+  }
+
+  if(!mainHtml) return noteHtml ? `<span style="opacity:.8;">${noteHtml}</span>` : null;
+  if(!noteHtml) return mainHtml;
+  return mainHtml + ` <span style="opacity:.62;font-weight:400;font-size:.92em;">(${noteHtml})</span>`;
 }
 
 // Menelusuri ke atas (lewat jalur ayah dulu, baru ibu) untuk menemukan
